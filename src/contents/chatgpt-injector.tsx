@@ -1,0 +1,572 @@
+/**
+ * ChatGPT Recall Button — Content Script
+ *
+ * Injects a "🧠 Recall" button adjacent to the ChatGPT composer send button.
+ * On click, it:
+ *   1. Extracts the current textarea text as the query.
+ *   2. Sends SEARCH_MEMORIES to the background service worker.
+ *   3. Formats top-k results as a RAG prompt.
+ *   4. Overwrites the textarea using React's native value setter hack so the
+ *      send button becomes active.
+ */
+
+import type { PlasmoCSConfig } from 'plasmo'
+import type { DomMessage, DomSyncResponse, SearchMemoriesResponse } from '../types/messages'
+
+export const config: PlasmoCSConfig = {
+  matches: ['https://chatgpt.com/*'],
+}
+
+const BUTTON_ID = 'ai-memory-recall-btn'
+const INPUT_ID = 'ai-memory-recall-topk'
+const STORAGE_KEY = 'recallTopK'
+const DEFAULT_TOP_K = 3
+
+// ─── React Textarea Sync Hack ─────────────────────────────────────────────────
+// React tracks input value through a synthetic event system. Setting
+// element.value directly skips this and leaves the send button disabled.
+// This hack uses the prototype's native setter (before React wraps it) so
+// React's onChange fires correctly.
+
+function setNativeValue(element: HTMLTextAreaElement, value: string): void {
+  const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set
+  const prototype = Object.getPrototypeOf(element)
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+
+  if (valueSetter && valueSetter !== prototypeValueSetter) {
+    prototypeValueSetter?.call(element, value)
+  } else {
+    valueSetter?.call(element, value)
+  }
+
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+// ─── Text Extraction & Injection ──────────────────────────────────────────────
+// ChatGPT's composer has used both <textarea> (older) and
+// <div contenteditable> (current). We handle both.
+
+function getInputText(): string {
+  const el = document.getElementById('prompt-textarea')
+  if (!el) return ''
+  if (el instanceof HTMLTextAreaElement) return el.value
+  // Contenteditable div — innerText preserves line breaks
+  return (el as HTMLElement).innerText ?? el.textContent ?? ''
+}
+
+function injectText(text: string): void {
+  const el = document.getElementById('prompt-textarea')
+  if (!el) return
+
+  if (el instanceof HTMLTextAreaElement) {
+    setNativeValue(el, text)
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  } else if ((el as HTMLElement).isContentEditable) {
+    // execCommand fires native DOM events that React's synthetic layer captures,
+    // correctly activating the send button. It also handles undo history.
+    el.focus()
+    document.execCommand('selectAll', false, undefined)
+    document.execCommand('insertText', false, text)
+  }
+}
+
+// ─── RAG Prompt Formatter ─────────────────────────────────────────────────────
+
+function formatRAGPrompt(
+  query: string,
+  results: SearchMemoriesResponse['payload']['results']
+): string {
+  const memoryBlocks = results
+    .map(
+      (m, i) =>
+        `--- Memory ${i + 1} ---\n` +
+        `${m.content}\n` +
+        `---------------------`
+    )
+    .join('\n')
+
+  return (
+    '[System Context: The following are relevant memories from our past conversations. Use them as background knowledge for your response.]\n' +
+    memoryBlocks +
+    '\n[User Query]\n' +
+    query
+  )
+}
+
+// ─── Background Message Bridge ────────────────────────────────────────────────
+
+function getTopK(): number {
+  const input = document.getElementById(INPUT_ID) as HTMLInputElement | null
+  if (input) {
+    const v = parseInt(input.value, 10)
+    if (!isNaN(v) && v >= 1) return Math.min(v, 20)
+  }
+  return DEFAULT_TOP_K
+}
+
+function searchMemories(query: string): Promise<SearchMemoriesResponse> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      {
+        type: 'SEARCH_MEMORIES',
+        payload: { query: query || 'general context', topK: getTopK() },
+      },
+      (resp: SearchMemoriesResponse | undefined) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
+        }
+        if (!resp) {
+          reject(new Error('No response from background script'))
+          return
+        }
+        resolve(resp)
+      }
+    )
+  })
+}
+
+// ─── Button Click Handler ─────────────────────────────────────────────────────
+
+async function handleRecallClick(btn: HTMLButtonElement): Promise<void> {
+  const query = getInputText().trim()
+
+  btn.textContent = 'Searching...'
+  btn.disabled = true
+
+  try {
+    const response = await searchMemories(query)
+    const results = response.payload.results ?? []
+
+    if (results.length === 0) {
+      alert('[AI Memory] No relevant memories found for your query.')
+      return
+    }
+
+    injectText(formatRAGPrompt(query, results))
+  } catch (err) {
+    console.error('[AI Memory] Recall failed:', err)
+    alert(`[AI Memory] Search failed: ${String(err)}`)
+  } finally {
+    btn.textContent = 'Recall'
+    btn.disabled = false
+  }
+}
+
+// ─── Button Creation ──────────────────────────────────────────────────────────
+
+const sharedInputStyle: Partial<CSSStyleDeclaration> = {
+  width: '36px',
+  padding: '2px 4px',
+  borderRadius: '6px',
+  border: '1.5px solid currentColor',
+  background: 'transparent',
+  color: 'inherit',
+  fontSize: '13px',
+  fontWeight: '500',
+  lineHeight: '1.5',
+  textAlign: 'center',
+  opacity: '0.75',
+  outline: 'none',
+}
+
+function createRecallButton(): HTMLElement {
+  const wrapper = document.createElement('span')
+  Object.assign(wrapper.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexShrink: '0',
+  })
+
+  // topK input
+  const input = document.createElement('input')
+  input.id = INPUT_ID
+  input.type = 'number'
+  input.min = '1'
+  input.max = '20'
+  input.title = 'Number of memories to recall'
+  Object.assign(input.style, sharedInputStyle)
+
+  // Load persisted value
+  chrome.storage.local.get([STORAGE_KEY], (res) => {
+    input.value = String(res[STORAGE_KEY] ?? DEFAULT_TOP_K)
+  })
+
+  input.addEventListener('change', () => {
+    const v = Math.max(1, Math.min(20, parseInt(input.value, 10) || DEFAULT_TOP_K))
+    input.value = String(v)
+    chrome.storage.local.set({ [STORAGE_KEY]: v })
+  })
+
+  // Prevent keydown from submitting the ChatGPT form
+  input.addEventListener('keydown', (e) => e.stopPropagation())
+
+  const btn = document.createElement('button')
+  btn.id = BUTTON_ID
+  btn.textContent = 'Recall'
+  btn.title = 'Recall past memories and inject as context'
+  btn.type = 'button'
+
+  Object.assign(btn.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 10px',
+    borderRadius: '8px',
+    border: '1.5px solid currentColor',
+    background: 'transparent',
+    color: 'inherit',
+    fontSize: '13px',
+    fontWeight: '500',
+    lineHeight: '1.5',
+    cursor: 'pointer',
+    opacity: '0.75',
+    whiteSpace: 'nowrap',
+    flexShrink: '0',
+    userSelect: 'none',
+    transition: 'opacity 0.15s',
+  })
+
+  btn.addEventListener('pointerenter', () => {
+    if (!btn.disabled) btn.style.opacity = '1'
+  })
+  btn.addEventListener('pointerleave', () => {
+    btn.style.opacity = '0.75'
+  })
+
+  btn.addEventListener('click', () => void handleRecallClick(btn))
+
+  wrapper.appendChild(input)
+  wrapper.appendChild(btn)
+  return wrapper
+}
+
+// ─── Insertion Point Resolution ───────────────────────────────────────────────
+// ChatGPT wraps each toolbar button in several layers of divs/spans for
+// tooltip positioning (e.g. button → div.relative → div → span → flex-row).
+// Using button.parentElement directly lands inside the tooltip wrapper.
+// We must walk UP to the first ancestor with ≥2 direct children (the flex row),
+// then insert our button as a sibling at that level.
+
+// "Start Voice" sits to the right of Dictate; Recall goes between them.
+// Fallbacks handle other locales and older UI versions.
+const BEFORE_BUTTON_SELECTORS = [
+  'button[aria-label="Start Voice"]',
+  '[data-testid="send-button"]',
+  'button[aria-label="Send message"]',
+  'button[aria-label="Send prompt"]',
+  'button[aria-label="傳送訊息"]',
+  'button[aria-label="送信"]',
+]
+
+// Dictate button — used as fallback anchor to insert after.
+const MIC_BUTTON_SELECTORS = [
+  'button[aria-label="Dictate button"]',
+  '[data-testid="composer-speech-button"]',
+  '[data-testid="voice-input-button"]',
+]
+
+/**
+ * Walk up from a button until reaching the first ancestor that has ≥2 direct
+ * element children (the flex toolbar row). Returns that ancestor and the direct
+ * child of it that contains the original button (the "slot" element).
+ */
+function findFlexSibling(
+  startBtn: HTMLElement
+): { container: HTMLElement; slotEl: HTMLElement } | null {
+  let el: HTMLElement = startBtn
+  while (el.parentElement && el.parentElement !== document.body) {
+    const parent = el.parentElement as HTMLElement
+    if (parent.children.length >= 2) {
+      return { container: parent, slotEl: el }
+    }
+    el = parent
+  }
+  return null
+}
+
+/**
+ * Returns { container, before } so we can call container.insertBefore(btn, before).
+ * `before` being null means append to end of container.
+ *
+ * Priority:
+ *   1. "Start Voice" / send button → walk to flex row → insert before its slot
+ *   2. Dictate / mic button → walk to flex row → insert after its slot
+ *   3. Walk up from #prompt-textarea, find ancestor with ≥2 direct children
+ *      → insert before the last child
+ */
+function findInsertionPoint(): { container: HTMLElement; before: HTMLElement | null } | null {
+  // Strategy 1: insert before "Start Voice" slot in the flex row
+  for (const sel of BEFORE_BUTTON_SELECTORS) {
+    const btn = document.querySelector<HTMLElement>(sel)
+    if (btn) {
+      const result = findFlexSibling(btn)
+      if (result) return { container: result.container, before: result.slotEl }
+    }
+  }
+
+  // Strategy 2: insert after the Dictate button's slot in the flex row
+  for (const sel of MIC_BUTTON_SELECTORS) {
+    const mic = document.querySelector<HTMLElement>(sel)
+    if (mic) {
+      const result = findFlexSibling(mic)
+      if (result) {
+        return {
+          container: result.container,
+          before: result.slotEl.nextElementSibling as HTMLElement | null,
+        }
+      }
+    }
+  }
+
+  // Strategy 3: walk up from #prompt-textarea, find ancestor with ≥2 direct children
+  const textarea = document.getElementById('prompt-textarea')
+  if (!textarea) return null
+
+  let el: HTMLElement | null = textarea.parentElement as HTMLElement | null
+  while (el && el !== document.body) {
+    if (el.children.length >= 2) {
+      const lastChild = el.children[el.children.length - 1] as HTMLElement
+      return { container: el, before: lastChild }
+    }
+    el = el.parentElement as HTMLElement | null
+  }
+
+  return null
+}
+
+// ─── Smart Sync Engine — DOM Scanner ─────────────────────────────────────────
+// Runs ONCE per page load (including hard refresh) to capture historical messages
+// that predate the network interceptor.  SPA navigations between conversations
+// also trigger a re-scan because the URL changes and we treat each conversation
+// URL as an independent "page".
+//
+// Algorithm:
+//   1. Extract sessionId from URL (/c/<uuid>).
+//   2. Scan all [data-testid^="conversation-turn-"] blocks.
+//   3. Inside each turn, collect every [data-message-id] bubble.
+//   4. Send the array to the background via DOM_SYNC.
+//   5. Background deduplicates against IndexedDB and queues new items.
+
+/** Extract the ChatGPT conversation UUID from the current URL. */
+function extractSessionId(): string | null {
+  const m = window.location.pathname.match(/\/c\/([0-9a-f-]{36})/i)
+  return m ? m[1] : null
+}
+
+/**
+ * Infer role from a conversation-turn block.
+ * ChatGPT uses alternating turns: odd = user, even = assistant (0-indexed).
+ * We rely on the data-testid suffix number rather than CSS classes since classes
+ * are obfuscated and change with deployments.
+ */
+function inferRoleFromTurn(turnEl: Element): 'user' | 'assistant' {
+  const testId = turnEl.getAttribute('data-testid') ?? ''
+  const match = testId.match(/conversation-turn-(\d+)/)
+  if (!match) return 'user'
+  // Turn numbers start at 1; odd = user (1,3,5…), even = assistant (2,4,6…)
+  return parseInt(match[1], 10) % 2 === 1 ? 'user' : 'assistant'
+}
+
+/** Extract visible text from a message bubble, stripping code-block labels etc. */
+function extractBubbleText(bubbleEl: Element): string {
+  // ChatGPT wraps code blocks with a header bar (language label + copy button).
+  // We strip only headers that sit inside <pre> ancestors to avoid accidentally
+  // removing flex toolbars that are part of the actual message content.
+  const clone = bubbleEl.cloneNode(true) as Element
+  clone.querySelectorAll('pre [class*="flex items-center"]').forEach((el) => el.remove())
+  return (clone as HTMLElement).innerText?.trim() ?? clone.textContent?.trim() ?? ''
+}
+
+/** Scan the current DOM and return all discovered DomMessage objects. */
+function scanDomMessages(sessionId: string): DomMessage[] {
+  const results: DomMessage[] = []
+  const pageTitle = document.title ?? ''
+  const scannedAt = Date.now()
+
+  // Each top-level conversation block
+  const turnEls = document.querySelectorAll('[data-testid^="conversation-turn-"]')
+
+  for (const turnEl of turnEls) {
+    const testId = turnEl.getAttribute('data-testid') ?? ''
+    const turnMatch = testId.match(/conversation-turn-(\d+)/)
+    if (!turnMatch) continue
+    const turnIndex = parseInt(turnMatch[1], 10)
+    const roleFromTurn = inferRoleFromTurn(turnEl)
+
+    // Within each turn there may be multiple message bubbles (e.g. multi-part responses)
+    const bubbles = turnEl.querySelectorAll('[data-message-id]')
+
+    for (const bubble of bubbles) {
+      const messageId = bubble.getAttribute('data-message-id')
+      if (!messageId) continue
+
+      const content = extractBubbleText(bubble)
+      if (!content) continue // skip empty / image-only bubbles
+
+      // The bubble's own role attribute overrides the turn-level inference when present
+      const roleAttr = bubble.getAttribute('data-message-author-role')
+      const role: 'user' | 'assistant' =
+        roleAttr === 'user' || roleAttr === 'assistant' ? roleAttr : roleFromTurn
+
+      results.push({
+        messageId,
+        role,
+        content,
+        turnIndex,
+        sessionId,
+        pageTitle,
+        scannedAt,
+      })
+    }
+  }
+
+  return results
+}
+
+/** Send scanned messages to the background for deduplication + queuing. */
+function sendDomSync(messages: DomMessage[]): void {
+  if (!messages.length) return
+
+  chrome.runtime.sendMessage(
+    {
+      type: 'DOM_SYNC',
+      payload: {
+        messages,
+        provider: 'openai',
+        url: window.location.href,
+      },
+    },
+    (resp: DomSyncResponse | undefined) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[AI Memory] DOM_SYNC error:', chrome.runtime.lastError.message)
+        return
+      }
+      const { queued = 0, skipped = 0 } = resp?.payload ?? {}
+
+    }
+  )
+}
+
+// ─── Sync Trigger Logic ───────────────────────────────────────────────────────
+// We scan only when the page is "fresh":
+//   - True page load / hard refresh: performance.navigation.type !== 1 (back/fwd)
+//     OR simply navigation to a conversation URL for the first time this SW lifetime.
+//   - SPA navigation (pushState): the URL's sessionId changes.
+//
+// We track which sessionIds we've already scanned in this content-script lifetime
+// (in-memory; cleared on hard refresh automatically).
+
+const _scannedSessions = new Set<string>()
+
+/**
+ * Wait until at least one [data-message-id] element is present in the DOM,
+ * then run the scan. Uses a MutationObserver with a 15s safety timeout.
+ *
+ * ChatGPT streams messages progressively — the first [data-message-id] node
+ * appears well before the full conversation finishes rendering. We add a small
+ * extra delay (800 ms) after first detection to let more bubbles render.
+ */
+function waitForMessageNodesAndScan(sessionId: string): void {
+  // If messages are already in the DOM, scan after a short settle delay
+  if (document.querySelector('[data-message-id]')) {
+    setTimeout(() => {
+      if (_scannedSessions.has(sessionId)) return
+      _scannedSessions.add(sessionId)
+      const messages = scanDomMessages(sessionId)
+      sendDomSync(messages)
+    }, 800)
+    return
+  }
+
+  // Otherwise observe the DOM until the first message bubble appears
+  let settled = false
+  const timeout = setTimeout(() => {
+    // Safety timeout — give up after 15s to avoid leaking the observer
+    observer.disconnect()
+  }, 15_000)
+
+  const observer = new MutationObserver(() => {
+    if (settled) return
+    if (!document.querySelector('[data-message-id]')) return
+    settled = true
+    observer.disconnect()
+    clearTimeout(timeout)
+
+    // Short extra delay so more bubbles can render before we snapshot
+    setTimeout(() => {
+      if (_scannedSessions.has(sessionId)) return
+      _scannedSessions.add(sessionId)
+      const messages = scanDomMessages(sessionId)
+      sendDomSync(messages)
+    }, 800)
+  })
+
+  observer.observe(document.body, { childList: true, subtree: true })
+}
+
+/**
+ * Run a DOM scan for the current conversation if we haven't done so yet.
+ * Safe to call multiple times — only runs once per sessionId per page lifetime.
+ */
+function maybeScanCurrentConversation(): void {
+  const sessionId = extractSessionId()
+  if (!sessionId) return                      // Not on a /c/<uuid> page
+  if (_scannedSessions.has(sessionId)) return // Already scanned this session
+
+  waitForMessageNodesAndScan(sessionId)
+}
+
+// ─── DOM Injection ────────────────────────────────────────────────────────────
+
+function tryInjectButton(): void {
+  if (document.getElementById(BUTTON_ID)) return
+
+  const point = findInsertionPoint()
+  if (!point) return
+
+  const btn = createRecallButton()
+  point.container.insertBefore(btn, point.before)
+}
+
+// ─── SPA Navigation Observer ──────────────────────────────────────────────────
+// ChatGPT is a React SPA; navigating between conversations replaces DOM nodes.
+// We use a MutationObserver + rAF debounce to re-inject after each render.
+// We also hook into SPA URL changes (popstate / replaceState) to trigger DOM
+// scans when the user navigates to a new conversation.
+
+let rafPending = false
+let _lastObservedUrl = window.location.href
+
+function scheduleInjection(): void {
+  if (rafPending) return
+  rafPending = true
+  requestAnimationFrame(() => {
+    rafPending = false
+    tryInjectButton()
+
+    // Detect SPA navigation (URL changed without a full page reload)
+    const currentUrl = window.location.href
+    if (currentUrl !== _lastObservedUrl) {
+      _lastObservedUrl = currentUrl
+      maybeScanCurrentConversation()
+    }
+  })
+}
+
+const observer = new MutationObserver(scheduleInjection)
+
+function start(): void {
+  tryInjectButton()
+  observer.observe(document.body, { childList: true, subtree: true })
+
+  // Scan on initial page load (covers hard refresh and direct link navigation)
+  maybeScanCurrentConversation()
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', start)
+} else {
+  start()
+}
