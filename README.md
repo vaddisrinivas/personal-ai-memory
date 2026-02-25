@@ -1,10 +1,10 @@
 <div align="center">
 
-# Personal AI Memory
+# Personal AI Memory: Local-First RAG Extension for LLM
 
 **Your conversations, remembered. Privately.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -20,7 +20,7 @@
 
 ---
 
-## Demo / Screenshots
+## Demo
 
 https://github.com/user-attachments/assets/d2aef66f-30b0-459c-8a92-64b8f5617bf6
 
