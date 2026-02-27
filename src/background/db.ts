@@ -254,8 +254,3 @@ export async function safeAddRecord(record: MemoryRecord): Promise<string | null
 
 
 export const memoryDB = new MemoryDatabase()
-
-// 只有在開發環境下，把 db 掛載到 globalThis (Service Worker 的全域)
-if (process.env.NODE_ENV === 'development') {
-  ;(globalThis as any).aiDB = memoryDB
-}

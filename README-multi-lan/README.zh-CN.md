@@ -254,4 +254,4 @@ pnpm test:e2e          # E2E 测试（Playwright — 需先 build）
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

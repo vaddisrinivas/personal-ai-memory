@@ -271,4 +271,4 @@ PRs and issues are welcome! Please open an issue to discuss significant changes 
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

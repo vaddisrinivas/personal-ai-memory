@@ -801,11 +801,6 @@ chrome.action.onClicked.addListener((tab) => {
   }
 })
 
-// Open DB on load so AIMemoryDB appears in DevTools → Application → IndexedDB
-void db.countTotal().then((n) => {
-  console.log('[AI Memory] Background initialized, DB ready, existing records:', n)
-})
-
 // Rebuild MiniSearch keyword index from Dexie on every Service Worker startup.
 // The SW can be suspended and revived at any time; in-memory state is wiped on each wake.
 void hydrateSearchIndex()

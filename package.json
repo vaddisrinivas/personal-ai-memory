@@ -51,7 +51,6 @@
       "https://gemini.google.com/*"
     ],
     "permissions": [
-      "storage",
       "unlimitedStorage",
       "tabs",
       "scripting",
@@ -66,8 +65,7 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "assets/icon.png",
-          "assets/models/**"
+          "assets/icon.png"
         ],
         "matches": [
           "<all_urls>"

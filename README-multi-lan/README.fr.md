@@ -257,4 +257,4 @@ Les PRs et Issues sont les bienvenues ! Veuillez ouvrir une Issue pour discuter 
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

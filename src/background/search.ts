@@ -40,14 +40,12 @@ export const miniSearch = new MiniSearch<MemoryRecord>({
  * Also call after a bulk import so the index reflects imported records.
  */
 export async function hydrateSearchIndex(): Promise<void> {
-  console.log('[AI Memory] Rebuilding MiniSearch keyword index…')
   try {
     const all = await db.memories.filter((r) => !r.isDeleted).toArray()
     miniSearch.removeAll()
     if (all.length > 0) {
       miniSearch.addAll(all)
     }
-    console.log(`[AI Memory] MiniSearch hydrated: ${all.length} records indexed`)
   } catch (err) {
     console.warn('[AI Memory] MiniSearch hydration failed:', err)
   }

@@ -26,7 +26,6 @@ export function mainWorldInterceptor(): void {
   } catch (_) {}
 
   try {
-    console.log('[AI Memory] Interceptor script running (MAIN world)')
     sendReady('started')
   } catch (_) {}
 
@@ -689,7 +688,6 @@ export function mainWorldInterceptor(): void {
   try {
     ;(interceptedFetch as unknown as { __aiMemoryIntercepted: boolean }).__aiMemoryIntercepted = true
     window.fetch = interceptedFetch
-    console.log('[AI Memory] Fetch interceptor installed')
     sendReady('fetch_installed')
   } catch (e) {
     sendReady('error: assign fetch ' + (e instanceof Error ? e.message : String(e)))

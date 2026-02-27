@@ -255,4 +255,4 @@ PRs und Issues sind willkommen! Bitte öffne ein Issue, um größere Änderungen
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)
