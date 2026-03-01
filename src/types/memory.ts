@@ -1,6 +1,6 @@
 export type MessageRole = 'user' | 'assistant'
 
-export type AIProvider = 'openai' | 'anthropic' | 'google'
+export type AIProvider = 'openai' | 'anthropic' | 'google' | 'xai' | 'perplexity'
 
 export interface MemoryRecord {
   // Primary Key

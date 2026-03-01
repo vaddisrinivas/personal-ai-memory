@@ -62,6 +62,12 @@ export interface Translations {
   importChatGPTFailed: (msg: string) => string
   importChatGPTInvalidFile: string
   importTypeChatGPT: string
+  importClaude: string
+  importingClaude: string
+  importClaudeSuccess: (n: number) => string
+  importClaudeFailed: (msg: string) => string
+  importClaudeInvalidFile: string
+  importTypeClaude: string
   settings: string
   dangerZone: string
   deleteAllMemory: string
@@ -74,6 +80,16 @@ export interface Translations {
   deleteAllFailed: (msg: string) => string
   searchMemories: string
   searchNoResults: string
+  sortNewest: string
+  sortOldest: string
+  /** Generic: "Importing {name}…" */
+  importingProvider: (name: string) => string
+  /** Generic: "Successfully imported N memories from {name}" */
+  importProviderSuccess: (name: string, n: number) => string
+  /** Generic: "Import from {name} failed: {msg}" */
+  importProviderFailed: (name: string, msg: string) => string
+  /** Generic: "Invalid file: not a valid {name} export" */
+  importProviderInvalidFile: (name: string) => string
 }
 
 export const LANG_NAMES: Record<LangCode, string> = {
@@ -149,6 +165,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT 匯入失敗：${msg}`,
     importChatGPTInvalidFile: '無效的檔案：這不是 ChatGPT 的對話匯出檔 (conversations.json)',
     importTypeChatGPT: 'ChatGPT 對話紀錄 (conversations.json)',
+    importClaude: '匯入 Claude 對話紀錄',
+    importingClaude: '匯入 Claude 中…',
+    importClaudeSuccess: (n) => `✓ 成功從 Claude 匯入 ${n} 筆記憶`,
+    importClaudeFailed: (msg) => `✕ Claude 匯入失敗：${msg}`,
+    importClaudeInvalidFile: '無效的檔案：這不是 Claude 的對話匯出檔 (conversations.json)',
+    importTypeClaude: 'Claude 對話紀錄 (conversations.json)',
     settings: '設定',
     dangerZone: '危險操作',
     deleteAllMemory: '刪除所有記憶',
@@ -160,7 +182,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ 所有記憶已刪除',
     deleteAllFailed: (msg) => `✕ 刪除失敗：${msg}`,
     searchMemories: '搜尋記憶…',
+    sortNewest: '最新優先',
+    sortOldest: '最舊優先',
     searchNoResults: '找不到符合的記憶',
+    importingProvider: (name) => `匯入 ${name} 中…`,
+    importProviderSuccess: (name, n) => `✓ 成功從 ${name} 匯入 ${n} 筆記憶`,
+    importProviderFailed: (name, msg) => `✕ ${name} 匯入失敗：${msg}`,
+    importProviderInvalidFile: (name) => `無效的檔案：這不是有效的 ${name} 匯出檔`,
   },
   'zh-CN': {
     totalRecords: (n) => `共 ${n} 条记忆`,
@@ -223,6 +251,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT 导入失败：${msg}`,
     importChatGPTInvalidFile: '无效的文件：这不是 ChatGPT 的对话导出文件 (conversations.json)',
     importTypeChatGPT: 'ChatGPT 对话记录 (conversations.json)',
+    importClaude: '导入 Claude 对话记录',
+    importingClaude: '导入 Claude 中…',
+    importClaudeSuccess: (n) => `✓ 成功从 Claude 导入 ${n} 条记忆`,
+    importClaudeFailed: (msg) => `✕ Claude 导入失败：${msg}`,
+    importClaudeInvalidFile: '无效的文件：这不是 Claude 的对话导出文件 (conversations.json)',
+    importTypeClaude: 'Claude 对话记录 (conversations.json)',
     settings: '设置',
     dangerZone: '危险操作',
     deleteAllMemory: '删除所有记忆',
@@ -234,7 +268,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ 所有记忆已删除',
     deleteAllFailed: (msg) => `✕ 删除失败：${msg}`,
     searchMemories: '搜索记忆…',
+    sortNewest: '最新优先',
+    sortOldest: '最旧优先',
     searchNoResults: '没有找到匹配的记忆',
+    importingProvider: (name) => `导入 ${name} 中…`,
+    importProviderSuccess: (name, n) => `✓ 成功从 ${name} 导入 ${n} 条记忆`,
+    importProviderFailed: (name, msg) => `✕ ${name} 导入失败：${msg}`,
+    importProviderInvalidFile: (name) => `无效的文件：这不是有效的 ${name} 导出文件`,
   },
   en: {
     totalRecords: (n) => `${n} ${n === 1 ? 'memory' : 'memories'}`,
@@ -297,6 +337,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT import failed: ${msg}`,
     importChatGPTInvalidFile: 'Invalid file: not a ChatGPT conversations export (conversations.json)',
     importTypeChatGPT: 'ChatGPT conversations (conversations.json)',
+    importClaude: 'Import Claude conversations',
+    importingClaude: 'Importing Claude…',
+    importClaudeSuccess: (n) => `✓ Successfully imported ${n} ${n === 1 ? 'memory' : 'memories'} from Claude`,
+    importClaudeFailed: (msg) => `✕ Claude import failed: ${msg}`,
+    importClaudeInvalidFile: 'Invalid file: not a Claude conversations export (conversations.json)',
+    importTypeClaude: 'Claude conversations (conversations.json)',
     settings: 'Settings',
     dangerZone: 'Danger Zone',
     deleteAllMemory: 'Delete all memories',
@@ -308,7 +354,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ All memories deleted',
     deleteAllFailed: (msg) => `✕ Delete failed: ${msg}`,
     searchMemories: 'Search memories…',
+    sortNewest: 'Newest first',
+    sortOldest: 'Oldest first',
     searchNoResults: 'No memories match your search',
+    importingProvider: (name) => `Importing ${name}…`,
+    importProviderSuccess: (name, n) => `✓ Successfully imported ${n} ${n === 1 ? 'memory' : 'memories'} from ${name}`,
+    importProviderFailed: (name, msg) => `✕ ${name} import failed: ${msg}`,
+    importProviderInvalidFile: (name) => `Invalid file: not a valid ${name} export`,
   },
   ja: {
     totalRecords: (n) => `${n} 件のメモリ`,
@@ -371,6 +423,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT インポート失敗：${msg}`,
     importChatGPTInvalidFile: '無効なファイル：ChatGPT の会話エクスポートファイルではありません',
     importTypeChatGPT: 'ChatGPT 会話 (conversations.json)',
+    importClaude: 'Claude の会話をインポート',
+    importingClaude: 'Claude をインポート中…',
+    importClaudeSuccess: (n) => `✓ Claude から ${n} 件のメモリをインポートしました`,
+    importClaudeFailed: (msg) => `✕ Claude インポート失敗：${msg}`,
+    importClaudeInvalidFile: '無効なファイル：Claude の会話エクスポートファイルではありません',
+    importTypeClaude: 'Claude 会話 (conversations.json)',
     settings: '設定',
     dangerZone: '危険な操作',
     deleteAllMemory: 'すべてのメモリを削除',
@@ -382,7 +440,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ すべてのメモリを削除しました',
     deleteAllFailed: (msg) => `✕ 削除失敗：${msg}`,
     searchMemories: 'メモリを検索…',
+    sortNewest: '新しい順',
+    sortOldest: '古い順',
     searchNoResults: '一致するメモリが見つかりません',
+    importingProvider: (name) => `${name} をインポート中…`,
+    importProviderSuccess: (name, n) => `✓ ${name} から ${n} 件のメモリをインポートしました`,
+    importProviderFailed: (name, msg) => `✕ ${name} インポート失敗：${msg}`,
+    importProviderInvalidFile: (name) => `無効なファイル：${name} の有効なエクスポートファイルではありません`,
   },
   ko: {
     totalRecords: (n) => `메모리 ${n}개`,
@@ -445,6 +509,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT 가져오기 실패: ${msg}`,
     importChatGPTInvalidFile: '잘못된 파일: ChatGPT 대화 내보내기 파일이 아닙니다',
     importTypeChatGPT: 'ChatGPT 대화 (conversations.json)',
+    importClaude: 'Claude 대화 가져오기',
+    importingClaude: 'Claude 가져오는 중…',
+    importClaudeSuccess: (n) => `✓ Claude에서 메모리 ${n}개를 가져왔습니다`,
+    importClaudeFailed: (msg) => `✕ Claude 가져오기 실패: ${msg}`,
+    importClaudeInvalidFile: '잘못된 파일: Claude 대화 내보내기 파일이 아닙니다',
+    importTypeClaude: 'Claude 대화 (conversations.json)',
     settings: '설정',
     dangerZone: '위험 구역',
     deleteAllMemory: '모든 메모리 삭제',
@@ -456,7 +526,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ 모든 메모리가 삭제되었습니다',
     deleteAllFailed: (msg) => `✕ 삭제 실패: ${msg}`,
     searchMemories: '메모리 검색…',
+    sortNewest: '최신순',
+    sortOldest: '오래된순',
     searchNoResults: '검색 결과가 없습니다',
+    importingProvider: (name) => `${name} 가져오는 중…`,
+    importProviderSuccess: (name, n) => `✓ ${name}에서 메모리 ${n}개를 가져왔습니다`,
+    importProviderFailed: (name, msg) => `✕ ${name} 가져오기 실패: ${msg}`,
+    importProviderInvalidFile: (name) => `잘못된 파일: 유효한 ${name} 내보내기 파일이 아닙니다`,
   },
   es: {
     totalRecords: (n) => `${n} ${n === 1 ? 'memoria' : 'memorias'}`,
@@ -521,6 +597,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ Error al importar ChatGPT: ${msg}`,
     importChatGPTInvalidFile: 'Archivo inválido: no es un archivo de exportación de conversaciones de ChatGPT',
     importTypeChatGPT: 'Conversaciones de ChatGPT (conversations.json)',
+    importClaude: 'Importar conversaciones de Claude',
+    importingClaude: 'Importando Claude…',
+    importClaudeSuccess: (n) => `✓ ${n} ${n === 1 ? 'memoria importada' : 'memorias importadas'} de Claude`,
+    importClaudeFailed: (msg) => `✕ Error al importar Claude: ${msg}`,
+    importClaudeInvalidFile: 'Archivo inválido: no es un archivo de exportación de conversaciones de Claude',
+    importTypeClaude: 'Conversaciones de Claude (conversations.json)',
     settings: 'Ajustes',
     dangerZone: 'Zona de peligro',
     deleteAllMemory: 'Eliminar todas las memorias',
@@ -532,7 +614,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ Todas las memorias eliminadas',
     deleteAllFailed: (msg) => `✕ Error al eliminar: ${msg}`,
     searchMemories: 'Buscar memorias…',
+    sortNewest: 'Más reciente primero',
+    sortOldest: 'Más antiguo primero',
     searchNoResults: 'No se encontraron memorias',
+    importingProvider: (name) => `Importando ${name}…`,
+    importProviderSuccess: (name, n) => `✓ ${n} ${n === 1 ? 'memoria importada' : 'memorias importadas'} de ${name}`,
+    importProviderFailed: (name, msg) => `✕ Error al importar ${name}: ${msg}`,
+    importProviderInvalidFile: (name) => `Archivo inválido: no es un archivo de exportación de ${name} válido`,
   },
   fr: {
     totalRecords: (n) => `${n} souvenir${n > 1 ? 's' : ''}`,
@@ -597,6 +685,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ Échec de l'import ChatGPT : ${msg}`,
     importChatGPTInvalidFile: "Fichier invalide : ce n'est pas un fichier d'export de conversations ChatGPT",
     importTypeChatGPT: 'Conversations ChatGPT (conversations.json)',
+    importClaude: 'Importer les conversations Claude',
+    importingClaude: 'Importation Claude…',
+    importClaudeSuccess: (n) => `✓ ${n} souvenir${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''} depuis Claude`,
+    importClaudeFailed: (msg) => `✕ Échec de l'import Claude : ${msg}`,
+    importClaudeInvalidFile: "Fichier invalide : ce n'est pas un fichier d'export de conversations Claude",
+    importTypeClaude: 'Conversations Claude (conversations.json)',
     settings: 'Paramètres',
     dangerZone: 'Zone dangereuse',
     deleteAllMemory: 'Supprimer tous les souvenirs',
@@ -608,7 +702,13 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ Tous les souvenirs supprimés',
     deleteAllFailed: (msg) => `✕ Échec de la suppression : ${msg}`,
     searchMemories: 'Rechercher des souvenirs…',
+    sortNewest: 'Plus récent d\'abord',
+    sortOldest: 'Plus ancien d\'abord',
     searchNoResults: 'Aucun souvenir trouvé',
+    importingProvider: (name) => `Import ${name}…`,
+    importProviderSuccess: (name, n) => `✓ ${n} souvenir${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''} depuis ${name}`,
+    importProviderFailed: (name, msg) => `✕ Échec de l'import ${name} : ${msg}`,
+    importProviderInvalidFile: (name) => `Fichier invalide : ce n'est pas un fichier d'export ${name} valide`,
   },
   de: {
     totalRecords: (n) => `${n} Erinnerung${n !== 1 ? 'en' : ''}`,
@@ -673,6 +773,12 @@ export const translations: Record<LangCode, Translations> = {
     importChatGPTFailed: (msg) => `✕ ChatGPT-Import fehlgeschlagen: ${msg}`,
     importChatGPTInvalidFile: 'Ungültige Datei: kein ChatGPT-Gesprächsexport (conversations.json)',
     importTypeChatGPT: 'ChatGPT-Gespräche (conversations.json)',
+    importClaude: 'Claude-Gespräche importieren',
+    importingClaude: 'Claude wird importiert…',
+    importClaudeSuccess: (n) => `✓ ${n} Erinnerung${n !== 1 ? 'en' : ''} aus Claude importiert`,
+    importClaudeFailed: (msg) => `✕ Claude-Import fehlgeschlagen: ${msg}`,
+    importClaudeInvalidFile: 'Ungültige Datei: kein Claude-Gesprächsexport (conversations.json)',
+    importTypeClaude: 'Claude-Gespräche (conversations.json)',
     settings: 'Einstellungen',
     dangerZone: 'Gefahrenzone',
     deleteAllMemory: 'Alle Erinnerungen löschen',
@@ -684,6 +790,12 @@ export const translations: Record<LangCode, Translations> = {
     deleteAllSuccess: '✓ Alle Erinnerungen gelöscht',
     deleteAllFailed: (msg) => `✕ Löschen fehlgeschlagen: ${msg}`,
     searchMemories: 'Erinnerungen suchen…',
+    sortNewest: 'Neueste zuerst',
+    sortOldest: 'Älteste zuerst',
     searchNoResults: 'Keine passenden Erinnerungen gefunden',
+    importingProvider: (name) => `${name} importieren…`,
+    importProviderSuccess: (name, n) => `✓ ${n} Erinnerung${n !== 1 ? 'en' : ''} aus ${name} importiert`,
+    importProviderFailed: (name, msg) => `✕ ${name}-Import fehlgeschlagen: ${msg}`,
+    importProviderInvalidFile: (name) => `Ungültige Datei: kein gültiger ${name}-Export`,
   },
 }

@@ -102,3 +102,25 @@ export const XIcon = ({ size = 14 }: IconProps) => (
     <line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 )
+
+// Lucide ArrowUpWideNarrow — widest bar at bottom, arrow points up (ascending / oldest first)
+export const ArrowUpWideNarrowIcon = ({ size = 15 }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m3 8 4-4 4 4"/>
+    <path d="M7 4v16"/>
+    <path d="M11 12h10"/>
+    <path d="M11 16h7"/>
+    <path d="M11 20h4"/>
+  </svg>
+)
+
+// Lucide ArrowDownWideNarrow — widest bar at top, arrow points down (descending / newest first)
+export const ArrowDownWideNarrowIcon = ({ size = 15 }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m3 16 4 4 4-4"/>
+    <path d="M7 20V4"/>
+    <path d="M11 4h10"/>
+    <path d="M11 8h7"/>
+    <path d="M11 12h4"/>
+  </svg>
+)

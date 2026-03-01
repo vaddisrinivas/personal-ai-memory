@@ -18,15 +18,18 @@
 >
 > **100% local. Pas de cloud. Pas de serveur. Pas de compte requis.**
 
+
 ---
 
 ## Installation
 
-### Pour les utilisateurs — Charger depuis une Release
+### Pour les utilisateurs — Chrome Web Store
 
-> _Disponible prochainement sur le Chrome Web Store._
+Installez directement depuis le [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh).
 
-En attendant, installez manuellement depuis une version de lancement :
+> **Note :** La version Chrome Web Store peut être en retard par rapport à la dernière version. Pour les fonctionnalités les plus récentes, téléchargez le dernier `.zip` depuis la page [Releases](../../releases) et installez-le manuellement (voir les étapes ci-dessous).
+
+### Installation manuelle depuis une Release
 
 1. Rendez-vous sur la page [Releases](../../releases) et téléchargez le dernier `.zip`
 2. Décompressez le fichier
@@ -65,14 +68,14 @@ pnpm build
 |----------------|---------|
 | **Capture passive** | Intercepte automatiquement ChatGPT / Claude / Gemini — sans configuration, sans clics |
 | **Recherche hybride** | Vectorielle (décroissance temporelle) + BM25, fusionnées avec RRF pour les meilleurs résultats |
-| **Recall en un clic** | Injecte les mémoires pertinentes comme prompt RAG dans ChatGPT |
+| **Recall en un clic** | Injecte les mémoires pertinentes comme prompt RAG dans ChatGPT et Claude |
 | **Sauvegarde locale** | Exportez / importez une sauvegarde complète en JSON (embeddings inclus) |
 | **Prompts favoris** | Sauvegarder, autocomplétion (Trie), organiser en dossiers glisser-déposer |
 | **Panneau flottant** | Panneau mémoire déplaçable sur chaque site IA |
 | **8 langues d'interface** | zh-TW · zh-CN · en · ja · ko · es · fr · de — détection automatique |
 | **Thème sombre / clair** | Bascule inspirée Apple Liquid Glass |
 
-**Plateformes supportées :** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude — _bientôt disponible_
+**Plateformes supportées :** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`)
 
 
 ---
@@ -119,7 +122,7 @@ Mémoires stockées localement dans IndexedDB
         │
         │  Plus tard — vous démarrez un nouveau chat
         ▼
-Cliquez sur 🧠 Recall à côté du champ de saisie ChatGPT
+Cliquez sur 🧠 Recall à côté du champ de saisie ChatGPT / Claude
         │
         ▼
 Recherche hybride :
@@ -243,6 +246,22 @@ pnpm test:integration  # Tests d'intégration
 pnpm test:e2e          # Tests E2E (Playwright — exécuter pnpm build d'abord)
 ```
 
+
+---
+
+## Journal des modifications
+
+### v0.0.2 — 2026-03-01
+- **Nouveau :** Support complet de Claude web (`claude.ai`) — capture de conversations, injection du bouton Recall et panneau mémoire flottant fonctionnent désormais sur Claude
+
+### v0.0.1 — Version initiale
+- Capture de conversations ChatGPT et Gemini
+- Recherche hybride vecteur + BM25 avec fusion RRF
+- Bouton Recall en un clic (ChatGPT)
+- Prompts favoris avec autocomplétion Trie et dossiers glisser-déposer
+- Export / import de sauvegarde JSON
+- Panneau mémoire flottant
+- 8 langues d'interface, thème sombre / clair
 
 ---
 

@@ -1,13 +1,16 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { ImportView } from './ImportView'
 import { ExportView } from './ExportView'
 import { FavoritePromptsSection } from './FavoritePromptsSection'
 import { useTranslation } from '../../i18n/LanguageContext'
 import { useTheme } from '../../i18n/ThemeContext'
 import { getThemeTokens } from '../../ui/theme'
-import { SunIcon, MoonIcon, GearIcon, ExternalLinkIcon, FolderIcon, ListIcon } from '../../ui/icons'
+import { SunIcon, MoonIcon, GearIcon, ExternalLinkIcon, FolderIcon, ListIcon, DownloadIcon } from '../../ui/icons'
 import * as S from '../../ui/styles'
 import type { LangCode } from '../../i18n/translations'
+import { parseClaudeConversations } from './importers/claudeConversations'
+import type { SerializableMemoryRecord } from '../../types/memory'
+import type { ImportMemoriesResponse } from '../../types/messages'
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +36,52 @@ export function MainMenuView({
   const { t, lang, setLang, langNames, langCodes } = useTranslation()
   const { theme, toggleTheme } = useTheme()
   const tk = getThemeTokens(theme)
+
+  const claudeInputRef = useRef<HTMLInputElement>(null)
+  const [importingClaude, setImportingClaude] = useState(false)
+  const [claudeStatus, setClaudeStatus] = useState<{ type: 'idle' } | { type: 'success'; msg: string } | { type: 'error'; msg: string }>({ type: 'idle' })
+
+  function handleClaudeImportClick() {
+    claudeInputRef.current?.click()
+  }
+
+  async function handleClaudeFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportingClaude(true)
+    setClaudeStatus({ type: 'idle' })
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      try {
+        let raw: unknown
+        try { raw = JSON.parse(ev.target?.result as string) } catch { throw new Error(t.importClaudeInvalidFile) }
+        if (!Array.isArray(raw)) throw new Error(t.importClaudeInvalidFile)
+        const records = parseClaudeConversations(raw)
+        if (records.length === 0) throw new Error(t.importClaudeInvalidFile)
+        const count = await new Promise<number>((resolve, reject) => {
+          chrome.runtime.sendMessage(
+            { type: 'IMPORT_MEMORIES', payload: { records: records as SerializableMemoryRecord[] } },
+            (r: ImportMemoriesResponse | undefined) => {
+              if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message))
+              if (!r) return reject(new Error('No response from background'))
+              if (!r.payload.success) return reject(new Error(r.payload.error ?? '寫入失敗'))
+              resolve(r.payload.count)
+            }
+          )
+        })
+        setClaudeStatus({ type: 'success', msg: t.importClaudeSuccess(count) })
+        setTimeout(() => setClaudeStatus({ type: 'idle' }), 3000)
+        onImported?.()
+      } catch (err) {
+        setClaudeStatus({ type: 'error', msg: t.importClaudeFailed((err as Error).message ?? String(err)) })
+      } finally {
+        setImportingClaude(false)
+        e.target.value = ''
+      }
+    }
+    reader.onerror = () => { setClaudeStatus({ type: 'error', msg: t.importReadFailed }); setImportingClaude(false) }
+    reader.readAsText(file)
+  }
 
   return (
     <div style={{ ...S.viewContainer, backgroundColor: tk.bg, color: tk.text }}>
@@ -135,6 +184,28 @@ export function MainMenuView({
       </button>
 
       <ImportView onImported={onImported} />
+
+      <div style={{ position: 'relative', width: '100%' }}>
+        <button
+          style={importingClaude
+            ? { ...S.menuBtn, ...S.btnDisabled }
+            : { ...S.menuBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
+          onClick={handleClaudeImportClick}
+          disabled={importingClaude}
+          type="button"
+        >
+          <span style={S.iconWrap}><DownloadIcon /></span>
+          <span>{importingClaude ? t.importingClaude : t.importClaude}</span>
+        </button>
+        <input ref={claudeInputRef} type="file" accept=".json" onChange={handleClaudeFileChange} style={{ display: 'none' }} />
+        {claudeStatus.type !== 'idle' && (
+          <div style={claudeStatus.type === 'success'
+            ? { ...S.statusMsg, backgroundColor: tk.successBg, color: tk.successText }
+            : { ...S.statusMsg, backgroundColor: tk.errorBg, color: tk.errorText }}>
+            {claudeStatus.msg}
+          </div>
+        )}
+      </div>
 
       <ExportView />
     </div>

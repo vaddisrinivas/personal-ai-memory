@@ -268,7 +268,7 @@ export function FolderView({ onBack, width }: FolderViewProps) {
           minWidth: 0,
           overflowX: 'hidden',
           backgroundColor: tk.bg,
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
         }}
       >
         {/* Header with back button */}

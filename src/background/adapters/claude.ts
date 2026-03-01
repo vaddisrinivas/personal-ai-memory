@@ -124,24 +124,55 @@ export class ClaudeAdapter implements IAdapter {
     const messages = data['chat_messages'] as Array<Record<string, unknown>>
     if (!messages.length) return []
 
-    // Return only the last message (most recent capture)
-    const last = messages[messages.length - 1]
-    const sender = last['sender'] as string
-    const text = (last['text'] as string) ?? ''
-    if (!text) return []
+    const sessionId = generateSessionId('anthropic', conversationUuid)
+    const records: MemoryRecord[] = []
 
-    const record: MemoryRecord = {
-      id: generateRecordId(),
-      role: sender === 'human' ? 'user' : 'assistant',
-      content: normalizeContent(text),
-      provider: 'anthropic',
-      sessionId: generateSessionId('anthropic', conversationUuid),
-      timestamp,
-      createdAt: Date.now(),
-      isPartial: false,
-      isDeleted: false,
-      isSuperseded: false,
+    for (const msg of messages) {
+      const msgUuid = msg['uuid'] as string | undefined
+      if (!msgUuid) continue
+
+      // Extract text: prefer content[] array, fall back to text field
+      let text = ''
+      const contentBlocks = msg['content']
+      if (Array.isArray(contentBlocks)) {
+        for (const block of contentBlocks as Array<Record<string, unknown>>) {
+          if (block['type'] === 'text' && typeof block['text'] === 'string') {
+            text += block['text']
+          }
+        }
+      }
+      if (!text && typeof msg['text'] === 'string') {
+        text = msg['text']
+      }
+      if (!text.trim()) continue
+
+      const sender = msg['sender'] as string
+      const updatedAtStr = msg['updated_at']
+      const createdAtStr = msg['created_at']
+      const msgTimestamp = typeof updatedAtStr === 'string' && updatedAtStr
+        ? (Date.parse(updatedAtStr) || timestamp)
+        : typeof createdAtStr === 'string' && createdAtStr
+          ? (Date.parse(createdAtStr) || timestamp)
+          : timestamp
+
+      const parentMessageUuid = msg['parent_message_uuid'] as string | undefined
+
+      records.push({
+        id: msgUuid,
+        role: sender === 'human' ? 'user' : 'assistant',
+        content: normalizeContent(text),
+        provider: 'anthropic',
+        sessionId,
+        parentMessageId: parentMessageUuid || undefined,
+        timestamp: msgTimestamp,
+        createdAt: Date.now(),
+        isPartial: false,
+        isDeleted: false,
+        isSuperseded: false,
+        metadata: { fromHistory: true },
+      })
     }
-    return [record]
+
+    return records
   }
 }

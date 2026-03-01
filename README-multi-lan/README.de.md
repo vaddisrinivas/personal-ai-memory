@@ -23,11 +23,13 @@
 
 ## Installation
 
-### Für Benutzer — Aus einem Release laden
+### Für Benutzer — Chrome Web Store
 
-> _Chrome Web Store-Eintrag folgt in Kürze._
+Direkt im [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh) installieren.
 
-Bis dahin manuell aus einem Release installieren:
+> **Hinweis:** Die Chrome Web Store-Version kann hinter der neuesten Version zurückliegen. Für die neuesten Funktionen lade das aktuelle `.zip` von der [Releases](../../releases)-Seite herunter und lade es manuell (Schritte unten).
+
+### Manuell aus einem Release installieren
 
 1. Gehe zur [Releases](../../releases)-Seite und lade das neueste `.zip` herunter
 2. Entpacke die Datei
@@ -66,14 +68,14 @@ pnpm build
 |----------|---------|
 | **Passive Erfassung** | Fängt ChatGPT / Claude / Gemini automatisch ab — kein Setup, keine Klicks |
 | **Hybridsuche** | Vektor (Zeitabfall) + BM25, mit RRF für optimale Ergebnisse fusioniert |
-| **Recall per Klick** | Injiziert relevante Erinnerungen als RAG-Prompt in ChatGPT |
+| **Recall per Klick** | Injiziert relevante Erinnerungen als RAG-Prompt in ChatGPT und Claude |
 | **Lokales Backup** | Exportiere / importiere vollständiges Backup als JSON (Embeddings enthalten) |
 | **Lieblingsaufforderungen** | Speichern, Autovervollständigung (Trie), in Drag-&-Drop-Ordner organisieren |
 | **Schwebendes Panel** | Verschiebbares Speicherpanel auf jeder KI-Seite |
 | **8 UI-Sprachen** | zh-TW · zh-CN · en · ja · ko · es · fr · de — automatisch erkannt |
 | **Dunkel- / Hellmodus** | Apple Liquid Glass-inspirierter Umschalter |
 
-**Unterstützte Plattformen:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude — _demnächst_
+**Unterstützte Plattformen:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`)
 
 ---
 
@@ -117,7 +119,7 @@ Erinnerungen lokal in IndexedDB gespeichert
         │
         │  Später — du startest einen neuen Chat
         ▼
-Klick auf 🧠 Recall neben dem ChatGPT-Eingabefeld
+Klick auf 🧠 Recall neben dem ChatGPT / Claude-Eingabefeld
         │
         ▼
 Hybridsuche:
@@ -240,6 +242,22 @@ pnpm test              # Unit-Tests (Vitest)
 pnpm test:integration  # Integrationstests
 pnpm test:e2e          # E2E-Tests (Playwright — erst pnpm build ausführen)
 ```
+
+---
+
+## Änderungsprotokoll
+
+### v0.0.2 — 2026-03-01
+- **Neu:** Vollständige Unterstützung für Claude Web (`claude.ai`) — Gesprächserfassung, Recall-Button-Injektion und schwebendes Speicherpanel funktionieren jetzt auf Claude
+
+### v0.0.1 — Erstveröffentlichung
+- ChatGPT- und Gemini-Gesprächserfassung
+- Hybridsuche Vektor + BM25 mit RRF-Fusion
+- Recall-Button per Klick (ChatGPT)
+- Lieblingsaufforderungen mit Trie-Autovervollständigung und Drag-&-Drop-Ordnern
+- JSON-Backup Export / Import
+- Schwebendes Speicherpanel
+- 8 UI-Sprachen, Dunkel- / Hellmodus
 
 
 ---

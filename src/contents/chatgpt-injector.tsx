@@ -352,7 +352,7 @@ function findInsertionPoint(): { container: HTMLElement; before: HTMLElement | n
 /** Extract the ChatGPT conversation UUID from the current URL. */
 function extractSessionId(): string | null {
   const m = window.location.pathname.match(/\/c\/([0-9a-f-]{36})/i)
-  return m ? m[1] : null
+  return m ? `openai:${m[1]}` : null
 }
 
 /**

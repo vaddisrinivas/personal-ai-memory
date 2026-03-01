@@ -119,7 +119,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 200,
     maxHeight: 520,
     overflowY: 'auto',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
     fontSize: 13,
     color: '#1a1a1a',
     backgroundColor: '#fff',

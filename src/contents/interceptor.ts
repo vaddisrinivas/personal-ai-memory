@@ -15,7 +15,8 @@ export const config: PlasmoCSConfig = {
   matches: [
     'https://chat.openai.com/*',
     'https://chatgpt.com/*',
-    'https://claude.ai/*',
+    'https://claude.ai/new/',
+    'https://claude.ai/chat/*',
     'https://gemini.google.com/*',
   ],
 }
@@ -33,6 +34,17 @@ function isExtensionContextValid(): boolean {
 }
 
 /**
+ * Per-provider strategy for extracting a conversationId from rawData.
+ * Add a new entry here when adding a new provider.
+ */
+const SESSION_ID_EXTRACTORS: Record<string, (data: Record<string, unknown>) => string | undefined> = {
+  openai:      (data) => (data['conversationId'] ?? data['conversation_id']) as string | undefined,
+  anthropic:   (data) => (data['conversationId'] ?? data['id']) as string | undefined,
+  google:      (data) => data['conversationId'] as string | undefined,
+  // xai / perplexity entries added here when those providers are implemented
+}
+
+/**
  * Extract sessionId from rawData if available.
  * Format: provider:conversationId
  */
@@ -45,23 +57,12 @@ function extractSessionId(payload: {
   }
 
   const data = payload.rawData as Record<string, unknown>
-  const provider = payload.provider
+  const extractor = SESSION_ID_EXTRACTORS[payload.provider]
+  if (!extractor) return null
 
-  // Try to extract conversationId from various formats
-  let conversationId: string | undefined
-
-  if (provider === 'openai') {
-    conversationId =
-      (data['conversationId'] as string | undefined) ??
-      (data['conversation_id'] as string | undefined)
-  } else if (provider === 'anthropic') {
-    conversationId = data['id'] as string | undefined
-  } else if (provider === 'google') {
-    conversationId = data['conversationId'] as string | undefined
-  }
-
+  const conversationId = extractor(data)
   if (conversationId && typeof conversationId === 'string' && conversationId.trim()) {
-    return `${provider}:${conversationId.trim()}`
+    return `${payload.provider}:${conversationId.trim()}`
   }
 
   return null
@@ -99,12 +100,30 @@ function updateConversationTitle(sessionId: string): void {
 // (ChatGPT generates the real title asynchronously after the first exchange)
 let lastSessionId: string | null = null
 let lastTitle = document.title
+
+/**
+ * Extract conversationId segment from the current page URL.
+ * Works for ChatGPT (/c/<id>), Claude (/chat/<id>), etc.
+ * Returns null if no conversation ID segment is found.
+ */
+function getConversationIdFromUrl(): string | null {
+  const path = window.location.pathname
+  // Match the last UUID-like or alphanumeric segment after /c/, /chat/, /conversation/
+  const m = path.match(/\/(?:c|chat|conversation)s?\/([^/]+)/)
+  return m ? m[1] : null
+}
+
 const titleObserver = new MutationObserver(() => {
   const currentTitle = document.title
-  if (currentTitle !== lastTitle && lastSessionId) {
-    lastTitle = currentTitle
-    updateConversationTitle(lastSessionId)
-  }
+  if (currentTitle === lastTitle || !lastSessionId) return
+  lastTitle = currentTitle
+
+  // Only update if the lastSessionId belongs to the conversation currently open in the tab.
+  // This prevents SPA navigation from writing the new page's title over a previous session.
+  const urlConvId = getConversationIdFromUrl()
+  if (urlConvId && !lastSessionId.endsWith(`:${urlConvId}`)) return
+
+  updateConversationTitle(lastSessionId)
 })
 
 // Start observing title changes
@@ -132,6 +151,58 @@ window.addEventListener('message', (e: MessageEvent) => {
   if (!isExtensionContextValid()) return
 
   try {
+    // Handle Claude session_create: register the new conversation sessionId in DB
+    if (
+      p.provider === 'anthropic' &&
+      p.rawData &&
+      typeof p.rawData === 'object' &&
+      (p.rawData as Record<string, unknown>)['type'] === 'session_create'
+    ) {
+      const conversationId = (p.rawData as Record<string, unknown>)['conversationId'] as string | undefined
+      if (conversationId) {
+        const sessionId = `anthropic:${conversationId}`
+        lastSessionId = sessionId
+        chrome.runtime.sendMessage(
+          { type: 'UPDATE_CONVERSATION_TITLE', payload: { sessionId, title: '' } },
+          () => {
+            try {
+              void chrome.runtime.lastError
+            } catch {
+              // ignore
+            }
+          }
+        )
+      }
+      return
+    }
+
+    // Handle Claude title_update: route directly to UPDATE_CONVERSATION_TITLE
+    if (
+      p.provider === 'anthropic' &&
+      p.rawData &&
+      typeof p.rawData === 'object' &&
+      (p.rawData as Record<string, unknown>)['type'] === 'title_update'
+    ) {
+      const rawData = p.rawData as Record<string, unknown>
+      const conversationId = rawData['conversationId'] as string | undefined
+      const title = rawData['title'] as string | undefined
+      if (conversationId && title) {
+        const sessionId = `anthropic:${conversationId}`
+        lastSessionId = sessionId
+        chrome.runtime.sendMessage(
+          { type: 'UPDATE_CONVERSATION_TITLE', payload: { sessionId, title } },
+          () => {
+            try {
+              void chrome.runtime.lastError
+            } catch {
+              // Extension context invalidated; ignore
+            }
+          }
+        )
+      }
+      return
+    }
+
     chrome.runtime.sendMessage(
       {
         type: 'CAPTURE_MESSAGE',
@@ -146,11 +217,20 @@ window.addEventListener('message', (e: MessageEvent) => {
       }
     )
 
-    // Extract sessionId and update title if available
+    // Extract sessionId and update title if available.
+    // Skip document.title-based update for Claude history payloads: the injector
+    // already sent a title_update event with the clean API title (no " - Claude" suffix).
     const sessionId = extractSessionId({ provider: p.provider, rawData: p.rawData })
     if (sessionId) {
       lastSessionId = sessionId
-      updateConversationTitle(sessionId)
+      const isClaudeHistory =
+        p.provider === 'anthropic' &&
+        p.rawData &&
+        typeof p.rawData === 'object' &&
+        Array.isArray((p.rawData as Record<string, unknown>)['chat_messages'])
+      if (!isClaudeHistory) {
+        updateConversationTitle(sessionId)
+      }
     }
   } catch {
     // Extension context invalidated or sendMessage failed; ignore

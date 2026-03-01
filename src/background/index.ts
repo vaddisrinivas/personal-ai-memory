@@ -130,6 +130,25 @@ async function handleCaptureMessage(
     return { success: false, error: 'No records extracted' }
   }
 
+  // Dedup chat history records (fromHistory=true):
+  // If the session already has any records (e.g. captured via SSE), skip writing new records
+  // to avoid duplicating messages.
+  const hasHistoryRecords = records.some((r) => r.metadata?.['fromHistory'] === true)
+  if (hasHistoryRecords) {
+    const sessionId = records[0].sessionId
+    const sessionExists = await db.hasSessionRecords(sessionId)
+    if (sessionExists) {
+      return { success: true, recordId: undefined }
+    }
+    // Session is new — still dedup individual UUIDs in case of partial prior writes
+    const allIds = records.map((r) => r.id)
+    const newIds = new Set(await db.filterNewChatMessageUuids(allIds))
+    records = records.filter((r) => newIds.has(r.id))
+    if (!records.length) {
+      return { success: true, recordId: undefined }
+    }
+  }
+
   const ids: string[] = []
   for (const record of records) {
     for (const chunk of expandToChunks(record)) {
@@ -287,9 +306,19 @@ async function broadcastStatusUpdate(): Promise<void> {
       },
     }
 
+    // Notify popup (extension page) — may be closed, ignore errors
     chrome.runtime
       .sendMessage(payload)
-      .catch(() => void 0) // popup may be closed — ignore
+      .catch(() => void 0)
+
+    // Notify content scripts (FloatingMemoryPanel) on all AI tabs
+    chrome.tabs.query({ url: AI_ORIGINS.map((o) => `${o}/*`) }, (tabs) => {
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, payload).catch(() => void 0)
+        }
+      }
+    })
   } catch {
     // Status broadcast is best-effort
   }
@@ -451,6 +480,10 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
 
     // Process pending embeddings in the background
     void processPendingEmbeddings()
+
+    // Notify popup so MemoryTableView reloads automatically
+    void broadcastStatusUpdate()
+
     return {
       type: 'IMPORT_MEMORIES_RESPONSE' as const,
       payload: { success: true, count: records.length },
@@ -534,7 +567,7 @@ async function handleDomSync(message: DomSyncRequest): Promise<DomSyncResponse> 
   const now = Date.now()
   for (const msg of newMessages) {
     const record: MemoryRecord = {
-      id: `dom:${msg.messageId}`,
+      id: msg.messageId,
       role: msg.role,
       content: msg.content,
       provider: 'openai',
@@ -717,8 +750,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })
 
-// Periodic status broadcast every 30 seconds to keep popup in sync
-setInterval(() => void broadcastStatusUpdate(), 30_000)
+// Periodic status broadcast — disabled for now, re-enable if needed
+// setInterval(() => void broadcastStatusUpdate(), 30_000)
 
 // ─── MAIN world injection for fetch/XHR interception ───────────────────────────
 

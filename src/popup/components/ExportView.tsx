@@ -60,6 +60,7 @@ export function ExportView() {
           await writable.write(blob)
           await writable.close()
           setStatus({ type: 'success', msg: successMsg(totalCount) })
+          setTimeout(() => setStatus({ type: 'idle' }), 3000)
           return
         } catch (pickerErr) {
           if ((pickerErr as DOMException)?.name === 'AbortError') return
@@ -76,6 +77,7 @@ export function ExportView() {
       URL.revokeObjectURL(url)
 
       setStatus({ type: 'success', msg: successDownloadsMsg(totalCount) })
+      setTimeout(() => setStatus({ type: 'idle' }), 3000)
     } catch (err) {
       console.error('[AI Memory] Export failed:', err)
       setStatus({ type: 'error', msg: t.exportFailed(String(err)) })

@@ -168,6 +168,29 @@ export class MemoryDatabase extends Dexie {
     await this.conversations.delete(sessionId)
   }
 
+  // ─── Chat History Deduplication ─────────────────────────────────────────────
+
+  /** Returns true if any non-deleted record exists for the given sessionId. */
+  async hasSessionRecords(sessionId: string): Promise<boolean> {
+    const count = await this.memories
+      .where('sessionId').equals(sessionId)
+      .filter((r) => !r.isDeleted)
+      .count()
+    return count > 0
+  }
+
+  /**
+   * Bulk existence check for chat_message UUIDs (from Claude conversation history).
+   * Returns only the UUIDs NOT yet stored in the DB.
+   */
+  async filterNewChatMessageUuids(uuids: string[]): Promise<string[]> {
+    if (uuids.length === 0) return []
+    const existing = await this.memories.bulkGet(uuids)
+    const found = new Set<string>()
+    existing.forEach((r, i) => { if (r) found.add(uuids[i]) })
+    return uuids.filter((id) => !found.has(id))
+  }
+
   // ─── DOM Sync Deduplication ─────────────────────────────────────────────────
 
   /**
@@ -194,7 +217,7 @@ export class MemoryDatabase extends Dexie {
    */
   async filterNewMessageIds(messageIds: string[]): Promise<string[]> {
     if (messageIds.length === 0) return []
-    const keys = messageIds.flatMap((mid) => [`dom:${mid}`, `dom:${mid}-c0`])
+    const keys = messageIds.flatMap((mid) => [mid, `${mid}-c0`])
     const existing = await this.memories.bulkGet(keys)
     const foundSet = new Set<string>()
     for (let i = 0; i < messageIds.length; i++) {
@@ -254,3 +277,8 @@ export async function safeAddRecord(record: MemoryRecord): Promise<string | null
 
 
 export const memoryDB = new MemoryDatabase()
+
+// 只有在開發環境下，把 db 掛載到 globalThis (Service Worker 的全域)
+if (process.env.NODE_ENV === 'development') {
+  ;(globalThis as any).aiDB = db
+}

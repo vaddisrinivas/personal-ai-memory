@@ -100,9 +100,7 @@ export function mainWorldInterceptor(): void {
       )
     }
     if (provider === 'anthropic') {
-      // TODO: Implement ClaudeAdapter
-      return url.includes('claude.ai/api') || url.includes('api.anthropic.com/v1/messages')
-      return false
+      return isClaudeCompletionUrl(url) || url.includes('api.anthropic.com/v1/messages')
     }
     if (provider === 'google') {
       return isGeminiStreamGenerateUrl(url)
@@ -321,8 +319,40 @@ export function mainWorldInterceptor(): void {
     return { text: userText.trim(), conversationId }
   }
 
+  /** Extract user message from Claude completion POST body (payload.prompt). */
+  function extractClaudeRequestUserMessage(body: unknown): { text: string; model?: string } | null {
+    if (!body || typeof body !== 'object') return null
+    const payload = body as Record<string, unknown>
+    const prompt = payload['prompt']
+    if (typeof prompt !== 'string' || !prompt.trim()) return null
+    const model = payload['model'] as string | undefined
+    return { text: prompt.trim(), model }
+  }
+
+  /** Returns true for Claude Web conversation history fetch (existing chat loaded). */
+  function isClaudeConversationHistoryUrl(url: string): boolean {
+    return /claude\.ai\/api\/organizations\/[^/]+\/chat_conversations\/[^/?]+/.test(url)
+      && url.includes('tree=True')
+  }
+
+  /** Returns true for Claude Web completion streaming endpoint. */
+  function isClaudeCompletionUrl(url: string): boolean {
+    return url.includes('claude.ai/api/') && url.endsWith('/completion')
+  }
+
+  /** Returns true for Claude Web title generation endpoint. */
+  function isClaudeTitleUrl(url: string): boolean {
+    return url.includes('claude.ai/api/') && url.endsWith('/title')
+  }
+
+  /** Extract conversation UUID from Claude API URL path. */
+  function extractClaudeConversationIdFromUrl(url: string): string | null {
+    const match = url.match(/chat_conversations\/([^/]+)\//)
+    return match ? match[1] : null
+  }
+
   /** Extract last user message and optional conversation_id from ChatGPT POST payload (payload.messages[]). */
-  function extractChatGPTRequestUserMessage(body: unknown): { text: string; conversationId?: string; model?: string } | null {
+  function extractChatGPTRequestUserMessage(body: unknown): { text: string; conversationId?: string; messageId?: string; model?: string } | null {
     if (!body || typeof body !== 'object') return null
     const payload = body as Record<string, unknown>
     const messages = payload['messages'] as Array<Record<string, unknown>> | undefined
@@ -363,11 +393,62 @@ export function mainWorldInterceptor(): void {
       (payload['conversation_id'] as string | undefined) ??
       (payload['conversationId'] as string | undefined)
     const id = typeof conversationId === 'string' && conversationId.trim() ? conversationId.trim() : undefined
-    return { text: text.trim(), conversationId: id, model }
+
+    const messageId = lastUser['id'] as string | undefined
+    const mid = typeof messageId === 'string' && messageId.trim() ? messageId.trim() : undefined
+
+    return { text: text.trim(), conversationId: id, messageId: mid, model }
+  }
+
+  // ── Provider Strategy Table ───────────────────────────────────────────────
+  // All referenced helpers are already defined above in the same function scope.
+  // Adding a new provider = adding one entry here + updating detectProvider().
+  const PROVIDER_STRATEGIES: Record<string, {
+    isConversationCaptureUrl(url: string): boolean
+    extractUserMessageFromBody(body: unknown, url: string): { text: string; conversationId?: string; messageId?: string; model?: string } | null
+    conversationIdFromUrl(url: string): string | undefined
+    usesDeltaV1(url: string): boolean
+  }> = {
+    openai: {
+      isConversationCaptureUrl(url) {
+        return (
+          url.endsWith('chatgpt.com/backend-api/f/conversation') ||
+          url.includes('chat.openai.com/backend-api/conversation')
+        )
+      },
+      extractUserMessageFromBody(body, _url) {
+        return extractChatGPTRequestUserMessage(body)
+      },
+      conversationIdFromUrl(_url) { return undefined },
+      usesDeltaV1(url) { return isChatGPTDeltaV1(url) },
+    },
+    anthropic: {
+      isConversationCaptureUrl(url) {
+        return isClaudeCompletionUrl(url) || url.includes('api.anthropic.com/v1/messages')
+      },
+      extractUserMessageFromBody(body, url) {
+        if (!isClaudeCompletionUrl(url)) return null
+        const result = extractClaudeRequestUserMessage(body)
+        if (!result) return null
+        const conversationId = extractClaudeConversationIdFromUrl(url) ?? undefined
+        return { text: result.text, model: result.model, conversationId }
+      },
+      conversationIdFromUrl(url) {
+        return extractClaudeConversationIdFromUrl(url) ?? undefined
+      },
+      usesDeltaV1(_url) { return false },
+    },
+    google: {
+      // Gemini uses XHR, not fetch — the fetch interceptor early-exits for google
+      isConversationCaptureUrl(_url) { return false },
+      extractUserMessageFromBody(_body, _url) { return null },
+      conversationIdFromUrl(_url) { return undefined },
+      usesDeltaV1(_url) { return false },
+    },
   }
 
   /** Pending user message when POST had no conversationId (new chat); we defer until stream gives us one. */
-  type PendingUserPayload = { role: 'user'; content: string; model?: string; isPartial: boolean } | null
+  type PendingUserPayload = { role: 'user'; content: string; model?: string; messageId?: string; isPartial: boolean } | null
 
   async function assembleChatGPTDeltaV1(
     reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -381,6 +462,7 @@ export function mainWorldInterceptor(): void {
     let currentEvent = ''
     let conversationId = ''
     let model: string | undefined
+    let assistantMessageId: string | undefined
     const assistantChunks: string[] = []
 
     try {
@@ -411,21 +493,30 @@ export function mainWorldInterceptor(): void {
             if (typeof cid === 'string' && cid.trim()) conversationId = cid.trim()
 
             if (currentEvent === 'delta') {
-              if (parsed['o'] === 'add' && !model) {
+              if (parsed['o'] === 'add') {
                 const msg = (parsed['v'] as Record<string, unknown> | undefined)?.['message'] as
                   | Record<string, unknown>
                   | undefined
-                model = (msg?.['metadata'] as Record<string, unknown> | undefined)?.[
-                  'model_slug'
-                ] as string | undefined
+                if (!model) {
+                  model = (msg?.['metadata'] as Record<string, unknown> | undefined)?.[
+                    'model_slug'
+                  ] as string | undefined
+                }
+                // Capture the assistant message's UUID from the stream — this matches
+                // the data-message-id attribute ChatGPT renders in the DOM, so the
+                // DOM-scan path (reload) and the network-capture path (new chat) both
+                // store the assistant reply under the same ID, preventing duplicates.
+                if (!assistantMessageId) {
+                  const msgId = msg?.['id'] as string | undefined
+                  if (typeof msgId === 'string' && msgId.trim()) {
+                    assistantMessageId = msgId.trim()
+                  }
+                }
               }
-              if (parsed['o'] === 'append' && typeof parsed['v'] === 'string') {
-                assistantChunks.push(parsed['v'])
-              }
-              // Handle explicit "patch" OR implicit patch:
-              // The first text delta has {"o":"patch","v":[...]}, but all subsequent
-              // deltas omit the top-level "o" field entirely: {"v":[...]}.
-              // Both must be treated the same way.
+              // Only use one path: if v is an array it's a patch operation (containing
+              // nested append ops); if v is a plain string it's a direct top-level append.
+              // These two formats are mutually exclusive — never let both paths run for
+              // the same event, which would duplicate the same text chunk.
               if (Array.isArray(parsed['v']) && (parsed['o'] === 'patch' || parsed['o'] === undefined)) {
                 for (const patch of parsed['v'] as Record<string, unknown>[]) {
                   if (
@@ -436,6 +527,8 @@ export function mainWorldInterceptor(): void {
                     assistantChunks.push(patch['v'])
                   }
                 }
+              } else if (parsed['o'] === 'append' && typeof parsed['v'] === 'string') {
+                assistantChunks.push(parsed['v'])
               }
             }
           } catch {
@@ -460,19 +553,19 @@ export function mainWorldInterceptor(): void {
       // Fallback: stream gave no conversationId, send user with 'unknown' to avoid losing it
       sendCapture('openai', { ...pendingUserPayload, conversationId: 'unknown' }, url, timestamp)
     }
-    if (assistantText) {
-      sendCapture(
-        'openai',
-        {
-          role: 'assistant',
-          content: assistantText,
-          conversationId: conversationId || 'unknown',
-          model,
-          isPartial: isPartialRef.value,
-        },
-        url,
-        timestamp
-      )
+    // Only store the assistant reply when the stream completed cleanly (not cut off).
+    // A partial/cut-off reply would be stored as incomplete content, and if ChatGPT
+    // retries the full stream, the complete version would be stored again as a duplicate.
+    if (assistantText && !isPartialRef.value) {
+      const assistantPayload: Record<string, unknown> = {
+        role: 'assistant',
+        content: assistantText,
+        conversationId: conversationId || 'unknown',
+        model,
+        isPartial: false,
+      }
+      if (assistantMessageId) assistantPayload['messageId'] = assistantMessageId
+      sendCapture('openai', assistantPayload, url, timestamp)
     }
   }
 
@@ -481,12 +574,13 @@ export function mainWorldInterceptor(): void {
     provider: string,
     url: string,
     timestamp: number,
-    isPartialRef: { value: boolean }
+    isPartialRef: { value: boolean },
+    conversationIdOverride?: string
   ): Promise<void> {
     const decoder = new TextDecoder()
     let buffer = ''
     const contentChunks: string[] = []
-    let conversationId: string | undefined
+    let conversationId: string | undefined = conversationIdOverride
     let model: string | undefined
     let role = 'assistant'
 
@@ -523,6 +617,7 @@ export function mainWorldInterceptor(): void {
 
             if (parsed['type'] === 'message_start') {
               const msg = parsed['message'] as Record<string, unknown> | undefined
+              // Only fall back to stream id if no override was provided
               if (!conversationId) conversationId = msg?.['id'] as string | undefined
               if (!model) model = msg?.['model'] as string | undefined
             }
@@ -608,12 +703,10 @@ export function mainWorldInterceptor(): void {
     const timestamp = Date.now()
     let pendingUserPayload: PendingUserPayload = null
 
-    // Capture user message from ChatGPT conversation POST body (payload.messages[])
-    if (
-      provider === 'openai' &&
-      isConversationCaptureUrl(url, provider) &&
-      isChatGPTDeltaV1(url)
-    ) {
+    const strategy = PROVIDER_STRATEGIES[provider]
+
+    // Capture user message from POST body via provider strategy
+    if (strategy && strategy.isConversationCaptureUrl(url)) {
       const method = (init?.method ?? (input instanceof Request ? (input as Request).method : 'GET')).toUpperCase()
       if (method === 'POST') {
         let bodyJson: unknown = null
@@ -632,7 +725,7 @@ export function mainWorldInterceptor(): void {
             // ignore
           }
         }
-        const userPayload = bodyJson ? extractChatGPTRequestUserMessage(bodyJson) : null
+        const userPayload = bodyJson ? strategy.extractUserMessageFromBody(bodyJson, url) : null
         if (userPayload?.text) {
           if (userPayload.conversationId) {
             const payload: Record<string, unknown> = {
@@ -642,13 +735,15 @@ export function mainWorldInterceptor(): void {
               conversationId: userPayload.conversationId,
             }
             if (userPayload.model) payload['model'] = userPayload.model
-            sendCapture('openai', payload, url, timestamp)
+            if (userPayload.messageId) payload['messageId'] = userPayload.messageId
+            sendCapture(provider, payload, url, timestamp)
           } else {
             pendingUserPayload = {
               role: 'user',
               content: userPayload.text,
               model: userPayload.model,
               isPartial: false,
+              messageId: userPayload.messageId,
             }
           }
         }
@@ -657,7 +752,52 @@ export function mainWorldInterceptor(): void {
 
     const response = await originalFetch(input, init)
 
-    if (!isConversationCaptureUrl(url, provider)) {
+    // Intercept Claude conversation history (user opened existing chat)
+    if (provider === 'anthropic' && isClaudeConversationHistoryUrl(url)) {
+      response.clone()
+        .json()
+        .then((data: unknown) => {
+          if (data && typeof data === 'object') {
+            const d = data as Record<string, unknown>
+            sendCapture('anthropic', data, url, timestamp)
+            const title = d['name']
+            const conversationId = d['uuid']
+            if (typeof title === 'string' && title.trim() && typeof conversationId === 'string' && conversationId.trim()) {
+              sendCapture('anthropic', { type: 'title_update', title: title.trim(), conversationId: conversationId.trim() }, url, timestamp)
+            }
+          }
+        })
+        .catch(() => undefined)
+      return response
+    }
+
+    // Intercept Claude title API response and send as title_update
+    if (provider === 'anthropic' && isClaudeTitleUrl(url)) {
+      const clonedTitle = response.clone()
+      clonedTitle
+        .json()
+        .then((data: unknown) => {
+          if (data && typeof data === 'object') {
+            const titleData = data as Record<string, unknown>
+            const title = titleData['title']
+            if (typeof title === 'string' && title.trim()) {
+              const conversationId = extractClaudeConversationIdFromUrl(url)
+              if (conversationId) {
+                sendCapture(
+                  'anthropic',
+                  { type: 'title_update', title: title.trim(), conversationId },
+                  url,
+                  timestamp
+                )
+              }
+            }
+          }
+        })
+        .catch(() => undefined)
+      return response
+    }
+
+    if (!strategy || !strategy.isConversationCaptureUrl(url)) {
       return response
     }
 
@@ -668,9 +808,10 @@ export function mainWorldInterceptor(): void {
       const reader = cloned.body?.getReader()
       if (reader) {
         const isPartialRef = { value: false }
-        const task = isChatGPTDeltaV1(url)
+        const convIdOverride = strategy.conversationIdFromUrl(url)
+        const task = strategy.usesDeltaV1(url)
           ? assembleChatGPTDeltaV1(reader, url, timestamp, isPartialRef, pendingUserPayload)
-          : assembleSSEStream(reader, provider, url, timestamp, isPartialRef)
+          : assembleSSEStream(reader, provider, url, timestamp, isPartialRef, convIdOverride)
         task.catch(() => {
           isPartialRef.value = true
         })

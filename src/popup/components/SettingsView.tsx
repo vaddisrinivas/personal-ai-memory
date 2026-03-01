@@ -31,6 +31,7 @@ export function SettingsView({ onBack, onAllDeleted }: SettingsViewProps) {
       })
       if (response?.payload?.success) {
         setStatus(t.deleteAllSuccess)
+        setTimeout(() => setStatus(null), 3000)
         setConfirming(false)
         onAllDeleted?.()
       } else {

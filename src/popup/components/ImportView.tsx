@@ -1,155 +1,13 @@
 import React, { useRef, useState, useEffect } from 'react'
 import type { IMemoryExportEnvelope, SerializableMemoryRecord } from '../../types/memory'
 import type { ImportMemoriesResponse } from '../../types/messages'
+import { IMPORTERS } from './importers/index'
+import type { IConversationImporter } from './importers/index'
 import { useTranslation } from '../../i18n/LanguageContext'
 import { useTheme } from '../../i18n/ThemeContext'
 import { getThemeTokens } from '../../ui/theme'
 import { DownloadIcon, ChevronRightIcon } from '../../ui/icons'
 import * as S from '../../ui/styles'
-
-// ── ChatGPT Conversation Parser ────────────────────────────────────────────────
-
-interface ChatGPTMessage {
-  id: string
-  author: { role: string }
-  content: { content_type: string; parts?: unknown[] }
-  create_time: number | null
-  status: string
-}
-
-interface ChatGPTMappingNode {
-  id: string
-  message: ChatGPTMessage | null
-  parent: string | null
-  children: string[]
-}
-
-interface ChatGPTConversation {
-  id: string
-  title?: string
-  mapping: Record<string, ChatGPTMappingNode>
-  create_time?: number
-}
-
-function parseChatGPTConversations(raw: unknown): SerializableMemoryRecord[] {
-  if (!Array.isArray(raw)) throw new Error('Not an array')
-  const records: SerializableMemoryRecord[] = []
-  const now = Date.now()
-
-  for (const conv of raw as ChatGPTConversation[]) {
-    if (!conv.id || !conv.mapping || typeof conv.mapping !== 'object') continue
-    const sessionId = `openai:chatgpt-${conv.id}`
-
-    for (const node of Object.values(conv.mapping)) {
-      const msg = node.message
-      if (!msg) continue
-      const role = msg.author?.role
-      if (role !== 'user' && role !== 'assistant') continue
-      if (msg.status !== 'finished_successfully') continue
-      if (msg.content?.content_type !== 'text') continue
-
-      const parts = msg.content.parts ?? []
-      const text = parts
-        .filter((p): p is string => typeof p === 'string')
-        .join('\n')
-        .trim()
-      if (!text) continue
-
-      const tsMs = msg.create_time ? msg.create_time * 1000 : now
-      const convCreatedAt = conv.create_time ? conv.create_time * 1000 : now
-
-      records.push({
-        id: `chatgpt-import-${msg.id}`,
-        role: role as 'user' | 'assistant',
-        content: text,
-        provider: 'openai',
-        sessionId,
-        timestamp: tsMs,
-        createdAt: convCreatedAt,
-        isPartial: false,
-        isDeleted: false,
-        isSuperseded: false,
-        metadata: { source: 'chatgpt-export', conversationTitle: conv.title ?? '' },
-      })
-    }
-  }
-  return records
-}
-
-// ── Gemini Takeout Parser ──────────────────────────────────────────────────────
-
-interface GeminiTakeoutEntry {
-  header?: string
-  title?: string
-  time?: string
-  products?: string[]
-  safeHtmlItem?: Array<{ html?: string }>
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<li>/gi, '• ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function parseGeminiTakeout(raw: unknown): SerializableMemoryRecord[] {
-  if (!Array.isArray(raw)) {
-    throw new Error('Not an array')
-  }
-  const records: SerializableMemoryRecord[] = []
-  const now = Date.now()
-  for (const entry of raw as GeminiTakeoutEntry[]) {
-    if (entry.header !== 'Gemini Apps') continue
-    const timeMs = entry.time ? new Date(entry.time).getTime() : now
-    if (isNaN(timeMs)) continue
-    const sessionId = `google:takeout-${timeMs}`
-    const rawTitle = entry.title ?? ''
-    const userText = rawTitle.startsWith('Prompted ') ? rawTitle.slice('Prompted '.length).trim() : rawTitle.trim()
-    if (userText) {
-      records.push({
-        id: `gemini-takeout-user-${timeMs}`,
-        role: 'user',
-        content: userText,
-        provider: 'google',
-        sessionId,
-        timestamp: timeMs,
-        createdAt: now,
-        isPartial: false,
-        isDeleted: false,
-        isSuperseded: false,
-        metadata: { source: 'google-takeout' },
-      })
-    }
-    const htmlParts = (entry.safeHtmlItem ?? []).map((item) => stripHtml(item.html ?? '')).filter(Boolean)
-    const assistantText = htmlParts.join('\n\n')
-    if (assistantText) {
-      records.push({
-        id: `gemini-takeout-assistant-${timeMs}`,
-        role: 'assistant',
-        content: assistantText,
-        provider: 'google',
-        sessionId,
-        timestamp: timeMs + 1,
-        createdAt: now,
-        isPartial: false,
-        isDeleted: false,
-        isSuperseded: false,
-        metadata: { source: 'google-takeout' },
-      })
-    }
-  }
-  return records
-}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -160,28 +18,27 @@ interface ImportViewProps { onImported?: () => void }
 export function ImportView({ onImported }: ImportViewProps) {
   const [status, setStatus] = useState<Status>({ type: 'idle' })
   const [importing, setImporting] = useState(false)
-  const [importingGemini, setImportingGemini] = useState(false)
-  const [importingChatGPT, setImportingChatGPT] = useState(false)
+  const [activeImporterId, setActiveImporterId] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const geminiInputRef = useRef<HTMLInputElement>(null)
-  const chatgptInputRef = useRef<HTMLInputElement>(null)
+  const backupInputRef = useRef<HTMLInputElement>(null)
+  const providerInputRef = useRef<HTMLInputElement>(null)
+  const currentImporterRef = useRef<IConversationImporter | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
-  
+
   const { t } = useTranslation()
   const { theme } = useTheme()
   const tk = getThemeTokens(theme)
 
-  // 延遲關閉選單，解決 mousedown 導致畫面縮水吞掉下方按鈕 click 的問題
+  // Delay close menu to avoid mousedown event swallowing the button click
   useEffect(() => {
     let timeoutId: number
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         timeoutId = window.setTimeout(() => {
           setMenuOpen(false)
-        }, 150) // 延遲 150 毫秒，保證 Export 按鈕能順利完成點擊
+        }, 150) // Delay 150ms to ensure the Export button can be clicked successfully
       }
     }
     if (menuOpen) {
@@ -205,7 +62,9 @@ export function ImportView({ onImported }: ImportViewProps) {
     return resp.payload.count
   }
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // ── Backup file handler (AI Memory backup format) ───────────────────────────
+
+  async function handleBackupFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setImporting(true)
@@ -232,6 +91,7 @@ export function ImportView({ onImported }: ImportViewProps) {
         })
         if (!resp.payload.success) throw new Error(resp.payload.error ?? '寫入失敗')
         setStatus({ type: 'success', msg: t.importSuccess(resp.payload.count) })
+        setTimeout(() => setStatus({ type: 'idle' }), 3000)
         setMenuOpen(false)
         onImported?.()
       } catch (err) {
@@ -245,88 +105,48 @@ export function ImportView({ onImported }: ImportViewProps) {
     reader.readAsText(file)
   }
 
-  async function handleGeminiFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // ── Generic provider importer handler ───────────────────────────────────────
+
+  async function handleProviderFileChange(e: React.ChangeEvent<HTMLInputElement>, importer: IConversationImporter) {
     const file = e.target.files?.[0]
     if (!file) return
-    setImportingGemini(true)
+    setActiveImporterId(importer.id)
     setStatus({ type: 'idle' })
     const reader = new FileReader()
     reader.onload = async (ev) => {
       try {
         let raw: unknown
-        try { raw = JSON.parse(ev.target?.result as string) } catch { throw new Error(t.importGeminiInvalidFile) }
-        if (!Array.isArray(raw)) throw new Error(t.importGeminiInvalidFile)
-        const hasGemini = (raw as GeminiTakeoutEntry[]).some((e) => e.header === 'Gemini Apps')
-        if (!hasGemini) throw new Error(t.importGeminiInvalidFile)
-        const records = parseGeminiTakeout(raw)
-        if (records.length === 0) throw new Error(t.importGeminiInvalidFile)
+        try { raw = JSON.parse(ev.target?.result as string) } catch { throw new Error(t.importProviderInvalidFile(importer.displayName)) }
+        if (!importer.canHandle(raw)) throw new Error(t.importProviderInvalidFile(importer.displayName))
+        const records = importer.parse(raw)
+        if (records.length === 0) throw new Error(t.importProviderInvalidFile(importer.displayName))
         const count = await sendRecordsToBackground(records)
-        setStatus({ type: 'success', msg: t.importGeminiSuccess(count) })
+        setStatus({ type: 'success', msg: t.importProviderSuccess(importer.displayName, count) })
+        setTimeout(() => setStatus({ type: 'idle' }), 3000)
         setMenuOpen(false)
         onImported?.()
       } catch (err) {
-        setStatus({ type: 'error', msg: t.importGeminiFailed((err as Error).message ?? String(err)) })
+        setStatus({ type: 'error', msg: t.importProviderFailed(importer.displayName, (err as Error).message ?? String(err)) })
       } finally {
-        setImportingGemini(false)
+        setActiveImporterId(null)
         e.target.value = ''
       }
     }
-    reader.onerror = () => { setStatus({ type: 'error', msg: t.importReadFailed }); setImportingGemini(false) }
+    reader.onerror = () => { setStatus({ type: 'error', msg: t.importReadFailed }); setActiveImporterId(null) }
     reader.readAsText(file)
   }
 
-  async function handleChatGPTFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImportingChatGPT(true)
-    setStatus({ type: 'idle' })
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      try {
-        let raw: unknown
-        try { raw = JSON.parse(ev.target?.result as string) } catch { throw new Error(t.importChatGPTInvalidFile) }
-        if (!Array.isArray(raw)) throw new Error(t.importChatGPTInvalidFile)
-        const records = parseChatGPTConversations(raw)
-        if (records.length === 0) throw new Error(t.importChatGPTInvalidFile)
-        const count = await sendRecordsToBackground(records)
-        setStatus({ type: 'success', msg: t.importChatGPTSuccess(count) })
-        setMenuOpen(false)
-        onImported?.()
-      } catch (err) {
-        setStatus({ type: 'error', msg: t.importChatGPTFailed((err as Error).message ?? String(err)) })
-      } finally {
-        setImportingChatGPT(false)
-        e.target.value = ''
-      }
-    }
-    reader.onerror = () => { setStatus({ type: 'error', msg: t.importReadFailed }); setImportingChatGPT(false) }
-    reader.readAsText(file)
-  }
-
-  const busy = importing || importingGemini || importingChatGPT
-  const buttonLabel = importing ? t.importing : importingGemini ? t.importingGemini : importingChatGPT ? t.importingChatGPT : t.importBackup
+  const busy = importing || activeImporterId !== null
+  const activeImporter = activeImporterId ? IMPORTERS.find(i => i.id === activeImporterId) : null
+  const buttonLabel = activeImporter
+    ? t.importingProvider(activeImporter.displayName)
+    : importing
+      ? t.importing
+      : t.importBackup
 
   const toggleMenu = (e: React.MouseEvent) => {
     e.stopPropagation()
     setMenuOpen(!menuOpen)
-  }
-
-  function handleChooseBackup(e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation() // 強制停止冒泡，避免點擊觸發其他關閉事件
-    fileInputRef.current?.click()
-  }
-
-  function handleChooseGemini(e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation() // 強制停止冒泡
-    geminiInputRef.current?.click()
-  }
-
-  function handleChooseChatGPT(e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    chatgptInputRef.current?.click()
   }
 
   return (
@@ -348,39 +168,54 @@ export function ImportView({ onImported }: ImportViewProps) {
       {menuOpen && (
         <div style={{ ...S.dropdownMenu, backgroundColor: tk.bg, borderColor: tk.border }}>
           <div style={{ ...S.dropdownMenuLabel, color: tk.textMuted }}>{t.importChoose}</div>
+
+          {/* Backup file (special: uses AI Memory envelope format) */}
           <button
             style={{ ...S.dropdownMenuItem, color: tk.text }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = tk.btnBg }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
-            onClick={handleChooseBackup}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); backupInputRef.current?.click() }}
             type="button"
           >
             {t.importTypeBackup}
           </button>
-          <button
-            style={{ ...S.dropdownMenuItem, color: tk.text }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = tk.btnBg }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
-            onClick={handleChooseGemini}
-            type="button"
-          >
-            {t.importTypeGemini}
-          </button>
-          <button
-            style={{ ...S.dropdownMenuItem, color: tk.text }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = tk.btnBg }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
-            onClick={handleChooseChatGPT}
-            type="button"
-          >
-            {t.importTypeChatGPT}
-          </button>
+
+          {/* Dynamic provider importers from registry */}
+          {IMPORTERS.map((importer) => (
+            <button
+              key={importer.id}
+              style={{ ...S.dropdownMenuItem, color: tk.text }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = tk.btnBg }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent' }}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                currentImporterRef.current = importer
+                providerInputRef.current?.click()
+              }}
+              type="button"
+            >
+              {importer.displayName}
+            </button>
+          ))}
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} style={{ display: 'none' }} />
-      <input ref={geminiInputRef} type="file" accept=".json" onChange={handleGeminiFileChange} style={{ display: 'none' }} />
-      <input ref={chatgptInputRef} type="file" accept=".json" onChange={handleChatGPTFileChange} style={{ display: 'none' }} />
+      {/* Backup file input (used to import the backup file from the AI Memory backup format) */}
+      <input ref={backupInputRef} type="file" accept=".json" onChange={handleBackupFileChange} style={{ display: 'none' }} />
+
+      {/* Shared provider file input — dispatches to currentImporterRef */}
+      <input
+        ref={providerInputRef}
+        type="file"
+        accept=".json"
+        onChange={(e) => {
+          const importer = currentImporterRef.current
+          currentImporterRef.current = null
+          if (importer) handleProviderFileChange(e, importer)
+        }}
+        style={{ display: 'none' }}
+      />
 
       {status.type !== 'idle' && (
         <div style={status.type === 'success' ? { ...S.statusMsg, backgroundColor: tk.successBg, color: tk.successText } : { ...S.statusMsg, backgroundColor: tk.errorBg, color: tk.errorText }}>

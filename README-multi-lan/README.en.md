@@ -18,15 +18,18 @@
 >
 > **100% local. No cloud. No server. No account required.**
 
+
 ---
 
 ## Installation
 
-### For Users — Load from Release
+### For Users — Chrome Web Store
 
-> _Chrome Web Store listing coming soon._
+Install directly from the [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh).
 
-Until then, install manually from a release build:
+> **Note:** The Chrome Web Store version may lag behind the latest release. For the newest features, download the latest `.zip` from the [Releases](../../releases) page and load it manually (see below).
+
+### Manual Install from Release
 
 1. Go to the [Releases](../../releases) page and download the latest `.zip`
 2. Unzip the file
@@ -65,14 +68,14 @@ pnpm build
 |---------|---------|
 | **Passive capture** | Auto-intercepts ChatGPT / Claude / Gemini — no setup, no clicks |
 | **Hybrid search** | Vector (time-decay) + BM25, fused with RRF for best-of-both results |
-| **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT |
+| **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT and Claude |
 | **Local backup** | Export / import full backup as JSON (embeddings included) |
 | **Favourite Prompts** | Save, autocomplete (Trie), organise into drag-and-drop folders |
 | **Floating panel** | Draggable memory panel on every AI site |
 | **8 UI languages** | zh-TW · zh-CN · en · ja · ko · es · fr · de — auto-detected |
 | **Dark / Light theme** | Apple Liquid Glass-inspired toggle |
 
-**Supported platforms:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude — _coming soon_
+**Supported platforms:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`)
 
 ---
 
@@ -117,7 +120,7 @@ Memories stored locally in IndexedDB
         │
         │  Later — you start a new chat
         ▼
-Click 🧠 Recall next to the ChatGPT input
+Click 🧠 Recall next to the ChatGPT / Claude input
         │
         ▼
 Hybrid search:
@@ -257,6 +260,22 @@ pnpm test:integration  # Integration tests
 pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 ```
 
+
+---
+
+## Changelog
+
+### v0.0.2 — 2026-03-01
+- **New:** Full Claude web support (`claude.ai`) — conversation capture, Recall button injection, and floating memory panel now work on Claude
+
+### v0.0.1 — Initial Release
+- ChatGPT and Gemini conversation capture
+- Hybrid vector + BM25 search with RRF fusion
+- One-click Recall button (ChatGPT)
+- Favourite Prompts with Trie autocomplete and drag-and-drop folders
+- Export / import JSON backup
+- Floating memory panel
+- 8 UI languages, dark / light theme
 
 ---
 

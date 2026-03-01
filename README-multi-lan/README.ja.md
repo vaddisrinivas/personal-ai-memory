@@ -18,15 +18,18 @@
 >
 > **100% ローカル。クラウドなし。サーバーなし。アカウント不要。**
 
+
 ---
 
 ## インストール
 
-### 一般ユーザー — Release からロード
+### 一般ユーザー — Chrome Web Store
 
-> _Chrome Web Store への掲載は近日予定です。_
+[Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh) から直接インストールできます。
 
-それまでは手動でインストールしてください：
+> **注意：** Chrome Web Store のバージョンは最新リリースより遅れる場合があります。最新機能をご利用の場合は、[Releases](../../releases) ページから最新 `.zip` をダウンロードして手動でロードしてください（手順は下記）。
+
+### Release から手動インストール
 
 1. [Releases](../../releases) ページから最新の `.zip` をダウンロード
 2. 解凍する
@@ -65,14 +68,14 @@ pnpm build
 |------|------|
 | **パッシブキャプチャ** | ChatGPT / Claude / Gemini を自動インターセプト — セットアップ不要、クリック不要 |
 | **ハイブリッド検索** | ベクトル検索（時間減衰）+ BM25、RRF でベスト結果に融合 |
-| **ワンクリック Recall** | 関連する記憶を RAG プロンプトとして ChatGPT に注入 |
+| **ワンクリック Recall** | 関連する記憶を RAG プロンプトとして ChatGPT・Claude に注入 |
 | **ローカルバックアップ** | JSON として完全バックアップをエクスポート / インポート（埋め込みベクトル含む） |
 | **お気に入りプロンプト** | 保存、Trie オートコンプリート、ドラッグ＆ドロップフォルダ整理 |
 | **フローティングパネル** | すべての AI サイトでドラッグ可能なメモリパネル |
 | **8 言語 UI** | zh-TW · zh-CN · en · ja · ko · es · fr · de — 自動検出 |
 | **ダーク / ライトテーマ** | Apple Liquid Glass 風トグル |
 
-**対応プラットフォーム:** ChatGPT（`chat.openai.com` / `chatgpt.com`）· Gemini（`gemini.google.com`）· Claude — _開発中_
+**対応プラットフォーム:** ChatGPT（`chat.openai.com` / `chatgpt.com`）· Gemini（`gemini.google.com`）· Claude（`claude.ai`）
 
 # ChatGPT/Geminiのチャット履歴をエクスポートする方法
 
@@ -114,7 +117,7 @@ ChatGPT / Claude / Gemini でチャット
         │
         │  後で — 新しいチャットを開始
         ▼
-ChatGPT 入力欄の横の 🧠 Recall をクリック
+ChatGPT / Claude 入力欄の横の 🧠 Recall をクリック
         │
         ▼
 ハイブリッド検索:
@@ -238,6 +241,21 @@ pnpm test:integration  # 統合テスト
 pnpm test:e2e          # E2E テスト（Playwright — 事前にビルドが必要）
 ```
 
+---
+
+## 更新履歴
+
+### v0.0.2 — 2026-03-01
+- **新機能：** Claude ウェブ版（`claude.ai`）への完全対応 — 会話キャプチャ、Recall ボタン注入、フローティングメモリパネルが Claude で利用可能に
+
+### v0.0.1 — 初回リリース
+- ChatGPT・Gemini の会話キャプチャ
+- ベクトル + BM25 ハイブリッド検索（RRF 融合）
+- ワンクリック Recall ボタン（ChatGPT）
+- お気に入りプロンプト（Trie オートコンプリート、ドラッグ＆ドロップフォルダ）
+- JSON バックアップ エクスポート / インポート
+- フローティングメモリパネル
+- 8 言語 UI、ダーク / ライトテーマ
 
 ---
 

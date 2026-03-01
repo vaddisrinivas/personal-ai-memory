@@ -18,10 +18,21 @@ const StarIcon = () => (
   </svg>
 )
 
+/** 2×3 grid of dots — drag handle indicator */
+const GripIcon = () => (
+  <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+    <circle cx="2.5" cy="2.5" r="1.2"/>
+    <circle cx="7.5" cy="2.5" r="1.2"/>
+    <circle cx="2.5" cy="7" r="1.2"/>
+    <circle cx="7.5" cy="7" r="1.2"/>
+    <circle cx="2.5" cy="11.5" r="1.2"/>
+    <circle cx="7.5" cy="11.5" r="1.2"/>
+  </svg>
+)
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE = 3
-const TRUNCATE_AT = 80
 
 export function FavoritePromptsSection() {
   const { t } = useTranslation()
@@ -30,10 +41,13 @@ export function FavoritePromptsSection() {
   const [prompts, setPrompts] = useState<FavoritePrompt[]>([])
   const [newText, setNewText] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [listExpanded, setListExpanded] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0)
+  // drag-to-reorder: which item is being dragged, and where the drop line should appear
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; edge: 'before' | 'after' } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const trieRef = useRef(new PromptTrie())
 
@@ -96,7 +110,7 @@ export function FavoritePromptsSection() {
     })
   }, [])
 
-  const toggleExpanded = useCallback((id: string) => {
+  const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -159,11 +173,73 @@ export function FavoritePromptsSection() {
     setSelectedSuggestionIndex(0)
   }, [])
 
-  const handleDragStart = useCallback((e: React.DragEvent, promptId: string) => {
-    e.dataTransfer.setData(DRAG_TYPE, promptId)
-    e.dataTransfer.setData('text/plain', promptId)
-    e.dataTransfer.effectAllowed = 'copy'
+  // ── Drag-to-reorder handlers ──────────────────────────────────────────────
+
+  const handleDragStart = useCallback((e: React.DragEvent, prompt: FavoritePrompt) => {
+    e.dataTransfer.setData(DRAG_TYPE, prompt.id)
+    // Set the actual text so dropping onto an external textarea inserts the prompt content
+    e.dataTransfer.setData('text/plain', prompt.text)
+    e.dataTransfer.effectAllowed = 'copyMove'
+    setDraggingId(prompt.id)
   }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingId(null)
+    setDropTarget(null)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, targetId: string) => {
+    if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    // Determine if cursor is in the top half (insert before) or bottom half (insert after)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const edge: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+    setDropTarget((prev) =>
+      prev?.id === targetId && prev?.edge === edge ? prev : { id: targetId, edge }
+    )
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving to outside the row (not to a child element)
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDropTarget(null)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    const sourceId = e.dataTransfer.getData(DRAG_TYPE)
+    if (!sourceId || sourceId === targetId) {
+      setDropTarget(null)
+      setDraggingId(null)
+      return
+    }
+    const sourceIdx = prompts.findIndex((p) => p.id === sourceId)
+    if (sourceIdx === -1) {
+      setDropTarget(null)
+      setDraggingId(null)
+      return
+    }
+    const targetIdx = prompts.findIndex((p) => p.id === targetId)
+    if (targetIdx === -1) {
+      setDropTarget(null)
+      setDraggingId(null)
+      return
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const edge: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+
+    const next = [...prompts]
+    const [moved] = next.splice(sourceIdx, 1)
+    // Recalculate targetIdx after removal
+    const newTargetIdx = next.findIndex((p) => p.id === targetId)
+    const insertAt = edge === 'before' ? newTargetIdx : newTargetIdx + 1
+    next.splice(insertAt, 0, moved)
+    savePrompts(next)
+    setDropTarget(null)
+    setDraggingId(null)
+  }, [prompts, savePrompts])
 
   return (
     <div style={styles.container}>
@@ -180,49 +256,80 @@ export function FavoritePromptsSection() {
         <div style={styles.promptList}>
           {visiblePrompts.map((p) => {
             const isExpanded = expandedIds.has(p.id)
-            const needsTruncation = p.text.length > TRUNCATE_AT
-            const displayText =
-              !isExpanded && needsTruncation ? p.text.slice(0, TRUNCATE_AT) + '…' : p.text
+            const isDragging = draggingId === p.id
+            const showLineBefore = dropTarget?.id === p.id && dropTarget.edge === 'before'
+            const showLineAfter = dropTarget?.id === p.id && dropTarget.edge === 'after'
             return (
-              <div
-                key={p.id}
-                style={{
-                  ...styles.promptRow,
-                  backgroundColor: tk.bgCard,
-                  borderColor: tk.border,
-                }}
-                draggable
-                onDragStart={(e) => handleDragStart(e, p.id)}
-              >
-                <div style={styles.promptBody}>
-                  <span style={{ ...styles.promptText, color: tk.text }}>{displayText}</span>
-                  {needsTruncation && (
+              <div key={p.id} style={{ position: 'relative' }}>
+                {/* Drop indicator line — before */}
+                {showLineBefore && (
+                  <div style={{ ...styles.dropLine, backgroundColor: tk.accent, top: -3 }} />
+                )}
+
+                <div
+                  style={{
+                    ...styles.promptRow,
+                    backgroundColor: tk.bgCard,
+                    borderColor: tk.border,
+                    opacity: isDragging ? 0.4 : 1,
+                    transition: 'opacity 0.1s',
+                  }}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, p)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, p.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, p.id)}
+                >
+                  {/* Grip handle */}
+                  <span style={{ ...styles.gripHandle, color: tk.textTertiary }}>
+                    <GripIcon />
+                  </span>
+
+                  {/* Prompt text — click to expand/collapse */}
+                  <span
+                    style={{
+                      ...styles.promptText,
+                      color: tk.text,
+                      whiteSpace: isExpanded ? 'pre-wrap' : 'nowrap',
+                      overflow: isExpanded ? 'visible' : 'hidden',
+                      textOverflow: isExpanded ? 'clip' : 'ellipsis',
+                      cursor: 'pointer',
+                      wordBreak: isExpanded ? 'break-word' : undefined,
+                    }}
+                    title={isExpanded ? undefined : p.text}
+                    onClick={() => toggleExpand(p.id)}
+                  >
+                    {p.text}
+                  </span>
+
+                  <div style={styles.promptActions}>
                     <button
                       type="button"
-                      style={{ ...styles.seeMoreBtn, color: tk.accent }}
-                      onClick={() => toggleExpanded(p.id)}
+                      style={{ ...styles.copyBtn, color: tk.accent }}
+                      onClick={() => copyPrompt(p.text, p.id)}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'underline' }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'none' }}
                     >
-                      {isExpanded ? t.seeLess : t.seeMore}
+                      {copiedId === p.id ? t.copied : t.copyBtn}
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      style={{ ...styles.deletePromptBtn, color: tk.textTertiary }}
+                      onClick={() => deletePrompt(p.id)}
+                      title={t.deleteBtn}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.errorText }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.textTertiary }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
-                <div style={styles.promptActions}>
-                  <button
-                    type="button"
-                    style={{ ...styles.copyBtn, color: tk.accent }}
-                    onClick={() => copyPrompt(p.text, p.id)}
-                  >
-                    {copiedId === p.id ? t.copied : t.copyBtn}
-                  </button>
-                  <button
-                    type="button"
-                    style={{ ...styles.deletePromptBtn, color: tk.textTertiary }}
-                    onClick={() => deletePrompt(p.id)}
-                    title={t.deleteBtn}
-                  >
-                    ×
-                  </button>
-                </div>
+
+                {/* Drop indicator line — after */}
+                {showLineAfter && (
+                  <div style={{ ...styles.dropLine, backgroundColor: tk.accent, bottom: -3 }} />
+                )}
               </div>
             )
           })}
@@ -261,26 +368,33 @@ export function FavoritePromptsSection() {
           <div
             style={{
               ...styles.suggestList,
-              backgroundColor: tk.bgCard,
+              backgroundColor: theme === 'dark' ? 'rgba(36,36,38,0.98)' : 'rgba(255,255,255,0.99)',
               borderColor: tk.border,
+              boxShadow: theme === 'dark'
+                ? '0 8px 28px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)'
+                : '0 8px 28px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.06)',
             }}
           >
             <div style={{ ...styles.suggestLabel, color: tk.textMuted }}>{t.suggestFromHistory}</div>
-            {suggestList.map((s, i) => (
-              <button
-                key={s}
-                type="button"
-                style={{
-                  ...styles.suggestItem,
-                  color: tk.text,
-                  backgroundColor: i === selectedSuggestionIndex ? tk.btnHoverBg : 'transparent',
-                }}
-                onClick={() => applySuggestion(s)}
-                onMouseEnter={() => setSelectedSuggestionIndex(i)}
-              >
-                {s.length > 80 ? s.slice(0, 80) + '…' : s}
-              </button>
-            ))}
+            {suggestList.map((s, i) => {
+              const isSelected = i === selectedSuggestionIndex
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  style={{
+                    ...styles.suggestItem,
+                    color: isSelected ? '#fff' : tk.text,
+                    backgroundColor: isSelected ? tk.accent : 'transparent',
+                    fontWeight: isSelected ? 500 : 400,
+                  }}
+                  onClick={() => applySuggestion(s)}
+                  onMouseEnter={() => setSelectedSuggestionIndex(i)}
+                >
+                  {s.length > 80 ? s.slice(0, 80) + '…' : s}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -329,45 +443,47 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
   },
+  dropLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 2,
+    borderRadius: 1,
+    pointerEvents: 'none',
+    zIndex: 2,
+  },
   promptRow: {
     display: 'flex',
+    flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
+    gap: 4,
     border: '1px solid',
     borderRadius: 10,
-    padding: '8px 10px',
-    cursor: 'grab',
+    padding: '6px 8px 6px 6px',
+    cursor: 'default',
   },
-  promptBody: {
-    flex: 1,
+  gripHandle: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-  },
-  promptText: {
-    fontSize: 12,
-    lineHeight: 1.5,
-    wordBreak: 'break-word',
-    letterSpacing: '-0.01em',
-  },
-  seeMoreBtn: {
-    fontSize: 11,
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 0,
-    textDecoration: 'underline',
-    textAlign: 'left',
-    whiteSpace: 'nowrap',
-    fontFamily: 'inherit',
+    alignItems: 'center',
+    flexShrink: 0,
+    cursor: 'grab',
+    paddingTop: 1,
+    opacity: 0.55,
   },
   promptActions: {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     flexShrink: 0,
+    paddingTop: 1,
+  },
+  promptText: {
+    fontSize: 12,
+    lineHeight: 1.5,
+    letterSpacing: '-0.01em',
+    flex: 1,
+    minWidth: 0,
   },
   copyBtn: {
     fontSize: 11,
@@ -375,17 +491,23 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     padding: '1px 4px',
-    textDecoration: 'underline',
+    textDecoration: 'none',
     whiteSpace: 'nowrap',
     fontFamily: 'inherit',
   },
   deletePromptBtn: {
     fontSize: 15,
+    lineHeight: 1,
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '0 2px',
-    lineHeight: 1,
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 18,
+    height: 18,
+    flexShrink: 0,
   },
   listToggleBtn: {
     fontSize: 11,
@@ -414,7 +536,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 4,
     border: '1px solid',
     borderRadius: 10,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
     zIndex: 10,
     maxHeight: 140,
     overflowY: 'auto',
@@ -438,7 +559,10 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     fontFamily: 'inherit',
-    transition: 'background-color 0.08s ease',
+    transition: 'background-color 0.08s ease, color 0.08s ease',
+    borderRadius: 6,
+    margin: '2px 4px',
+    boxSizing: 'border-box',
   },
   textarea: {
     width: '100%',
@@ -449,7 +573,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     resize: 'vertical',
     outline: 'none',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
     boxSizing: 'border-box',
     minHeight: 70,
     letterSpacing: '-0.01em',

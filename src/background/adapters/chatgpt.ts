@@ -147,9 +147,10 @@ export class ChatGPTAdapter implements IAdapter {
     const conversationId =
       typeof raw === 'string' && raw.trim() ? raw.trim() : 'unknown'
     const isPartial = Boolean(data['isPartial'])
+    const messageId = data['messageId'] as string | undefined
 
     const record: MemoryRecord = {
-      id: generateRecordId(),
+      id: typeof messageId === 'string' && messageId.trim() ? messageId.trim() : generateRecordId(),
       role: role === 'user' ? 'user' : 'assistant',
       content: normalizeContent(content),
       provider: 'openai',

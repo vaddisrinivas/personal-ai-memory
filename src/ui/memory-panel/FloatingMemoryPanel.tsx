@@ -59,6 +59,14 @@ const GearIcon = () => (
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const PANEL_WIDTH = 420
+
+const THEME_TRANSITION_CSS = `
+.aim-panel * {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: 0.25s;
+  transition-timing-function: ease;
+}
+`
 const MARGIN = 16
 const LOGO_SIZE = 60
 
@@ -115,7 +123,21 @@ function useEscape(panelOpen: boolean, onClose: () => void) {
 
 // ── Inner Component ────────────────────────────────────────────────────────────
 
+// Inject theme transition CSS once on mount
+function useThemeTransitionStyle() {
+  useEffect(() => {
+    const id = 'aim-theme-transition-style'
+    if (document.getElementById(id)) return
+    const el = document.createElement('style')
+    el.id = id
+    el.textContent = THEME_TRANSITION_CSS
+    document.head.appendChild(el)
+    return () => el.remove()
+  }, [])
+}
+
 function FloatingMemoryPanelInner() {
+  useThemeTransitionStyle()
   const { t, lang, setLang, langNames, langCodes } = useTranslation()
   const { theme, toggleTheme } = useTheme()
   const tk = getThemeTokens(theme)
@@ -125,10 +147,25 @@ function FloatingMemoryPanelInner() {
   const [logoHovered, setLogoHovered] = useState(false)
   const [logoTop, setLogoTop] = useState(() => clampLogoTop(100))
   const [panelPos, setPanelPos] = useState<{ left: number; top: number } | null>(null)
+  const [dataVersion, setDataVersion] = useState(0)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef({ active: false, startX: 0, startY: 0, startLeft: 0, startTop: 0, didMove: false })
   const panelDragRef = useRef({ active: false, startX: 0, startY: 0, startLeft: 0, startTop: 0 })
   const { width: panelMaxWidth, height: panelMaxHeight } = useViewportClamp()
+
+  // Listen for STATUS_UPDATE from background so MemoryTableView reloads after import/delete
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      const msg = message as { type?: string }
+      if (msg.type === 'STATUS_UPDATE') {
+        setDataVersion((v) => v + 1)
+      }
+    }
+    chrome.runtime.onMessage.addListener(listener)
+    return () => chrome.runtime.onMessage.removeListener(listener)
+  }, [])
+
+  const refreshData = useCallback(() => setDataVersion((v) => v + 1), [])
 
   const closePanel = useCallback(() => setPanelOpen(false), [])
   const openPanel = useCallback(() => {
@@ -239,7 +276,7 @@ function FloatingMemoryPanelInner() {
       style={{
         position: 'fixed',
         zIndex: 2147483647,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
         fontSize: 13,
       }}
     >
@@ -349,6 +386,7 @@ function FloatingMemoryPanelInner() {
             ref={panelRef}
             role="dialog"
             aria-label="AI Memory panel"
+            className="aim-panel"
             style={{
               position: 'fixed',
               left: pos.left,
@@ -367,6 +405,7 @@ function FloatingMemoryPanelInner() {
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              transition: 'background-color 0.25s ease, box-shadow 0.25s ease',
             }}
           >
             {/* Header */}
@@ -381,12 +420,24 @@ function FloatingMemoryPanelInner() {
                 backgroundColor: theme === 'dark' ? 'rgba(44,44,46,0.70)' : 'rgba(255,255,255,0.60)',
                 cursor: 'grab',
                 flexShrink: 0,
+                transition: 'background-color 0.25s ease, border-color 0.25s ease',
               }}
               onMouseDown={onPanelHeaderMouseDown}
             >
-              <span style={{ fontWeight: 700, fontSize: 14, color: tk.text, letterSpacing: '-0.02em' }}>
-                AI Memory
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 4 }}>
+                {/* Drag handle decoration — 3 cols × 2 rows of dots (horizontal) */}
+                <svg width="14" height="8" viewBox="0 0 14 8" fill="none" style={{ flexShrink: 0, opacity: 0.35, pointerEvents: 'none' }}>
+                  <circle cx="1.5"  cy="1.5" r="1.5" fill="currentColor"/>
+                  <circle cx="7"    cy="1.5" r="1.5" fill="currentColor"/>
+                  <circle cx="12.5" cy="1.5" r="1.5" fill="currentColor"/>
+                  <circle cx="1.5"  cy="6.5" r="1.5" fill="currentColor"/>
+                  <circle cx="7"    cy="6.5" r="1.5" fill="currentColor"/>
+                  <circle cx="12.5" cy="6.5" r="1.5" fill="currentColor"/>
+                </svg>
+                <span style={{ fontWeight: 700, fontSize: 14, color: tk.text, letterSpacing: '-0.02em' }}>
+                  AI Memory
+                </span>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
                   type="button"
@@ -469,90 +520,85 @@ function FloatingMemoryPanelInner() {
                     padding: 0,
                     borderRadius: 6,
                   }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.text }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.textMuted }}
                 >
                   <XIcon />
                 </button>
               </div>
             </div>
 
-            {/* Content — memory view owns its own scroll; other views use the outer scroller */}
-            <div
-              style={{
-                overflowY: panelView === 'memory' ? 'hidden' : 'auto',
-                overflowX: 'hidden',
-                flex: 1,
-                minHeight: 0,
-                maxHeight: panelMaxHeight - 52,
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {panelView === 'memory' ? (
-                <MemoryTableView
-                  width={panelMaxWidth - 8}
-                  maxHeight={panelMaxHeight - 60}
-                  onBack={() => setPanelView('menu')}
-                />
-              ) : panelView === 'folder' ? (
-                <FolderView
-                  onBack={() => setPanelView('menu')}
-                  width={panelMaxWidth}
-                />
-              ) : panelView === 'settings' ? (
-                <SettingsView
-                  onBack={() => setPanelView('menu')}
-                />
-              ) : (
+            {/* Content — sliding two-slot layout */}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  width: panelMaxWidth * 2,
+                  height: '100%',
+                  transform: panelView === 'menu' ? 'translateX(0)' : `translateX(-${panelMaxWidth}px)`,
+                  transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              >
+                {/* Slot 0: Menu */}
                 <div
                   style={{
-                    padding: '12px 16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10,
+                    width: panelMaxWidth,
+                    flexShrink: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    maxHeight: panelMaxHeight - 52,
+                    opacity: panelView === 'menu' ? 1 : 0,
+                    transition: 'opacity 0.22s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease',
                   }}
                 >
-                  {/* Favorite Prompts */}
-                  <FavoritePromptsSection />
-
-                  {/* Prompts Folder button */}
-                  <button
-                    type="button"
-                    style={{
-                      ...panelMenuBtn,
-                      backgroundColor: tk.btnBg,
-                      borderColor: tk.border,
-                      color: tk.text,
-                    }}
-                    onClick={() => setPanelView('folder')}
-                  >
-                    <span style={panelMenuIconWrap}><FolderIcon /></span>
-                    <span>{t.promptsFolder}</span>
-                  </button>
-
-                  <div style={{ height: 1, backgroundColor: tk.separator, margin: '2px 0' }} />
-
-                  {/* Navigate to memory list */}
-                  <button
-                    type="button"
-                    style={{
-                      ...panelMenuBtn,
-                      backgroundColor: tk.btnBg,
-                      borderColor: tk.border,
-                      color: tk.text,
-                    }}
-                    onClick={() => setPanelView('memory')}
-                  >
-                    <span style={panelMenuIconWrap}><ListIcon /></span>
-                    <span>{t.viewMemories}</span>
-                  </button>
-
-                  {/* Import */}
-                  <ImportView />
-
-                  {/* Export */}
-                  <ExportView />
+                  <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <FavoritePromptsSection />
+                    <button
+                      type="button"
+                      style={{ ...panelMenuBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
+                      onClick={() => setPanelView('folder')}
+                    >
+                      <span style={panelMenuIconWrap}><FolderIcon /></span>
+                      <span>{t.promptsFolder}</span>
+                    </button>
+                    <div style={{ height: 1, backgroundColor: tk.separator, margin: '2px 0' }} />
+                    <button
+                      type="button"
+                      style={{ ...panelMenuBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
+                      onClick={() => setPanelView('memory')}
+                    >
+                      <span style={panelMenuIconWrap}><ListIcon /></span>
+                      <span>{t.viewMemories}</span>
+                    </button>
+                    <ImportView onImported={refreshData} />
+                    <ExportView />
+                  </div>
                 </div>
-              )}
+
+                {/* Slot 1: Detail views — all rendered, visibility toggled to prevent flash during slide-back */}
+                <div style={{ width: panelMaxWidth, flexShrink: 0, position: 'relative', maxHeight: panelMaxHeight - 52, opacity: panelView !== 'menu' ? 1 : 0, transition: 'opacity 0.22s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease' }}>
+                  <div style={{ display: panelView === 'memory' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                    <MemoryTableView
+                      width={panelMaxWidth - 8}
+                      maxHeight={panelMaxHeight - 60}
+                      onBack={() => setPanelView('menu')}
+                      reloadKey={dataVersion}
+                    />
+                  </div>
+                  <div style={{ display: panelView === 'folder' ? 'block' : 'none', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
+                    <FolderView
+                      onBack={() => setPanelView('menu')}
+                      width={panelMaxWidth}
+                    />
+                  </div>
+                  <div style={{ display: panelView === 'settings' ? 'block' : 'none', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
+                    <SettingsView
+                      onBack={() => setPanelView('menu')}
+                      onAllDeleted={refreshData}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )
@@ -585,7 +631,7 @@ const panelMenuBtn: React.CSSProperties = {
   textAlign: 'left',
   boxSizing: 'border-box',
   transition: 'opacity 0.12s ease',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
+  fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
   letterSpacing: '-0.01em',
 }
 

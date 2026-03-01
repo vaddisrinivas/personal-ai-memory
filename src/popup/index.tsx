@@ -21,13 +21,30 @@ const AI_ORIGINS = [
 
 const POPUP_WIDTH = 360
 
+const THEME_TRANSITION_CSS = `
+.aim-panel * {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: 0.25s;
+  transition-timing-function: ease;
+}
+`
+
 function App() {
+  useEffect(() => {
+    const id = 'aim-theme-transition-style'
+    if (document.getElementById(id)) return
+    const el = document.createElement('style')
+    el.id = id
+    el.textContent = THEME_TRANSITION_CSS
+    document.head.appendChild(el)
+  }, [])
   const [view, setView] = useState<View>('main')
   const [detailView, setDetailView] = useState<DetailView>('memory')
   const [totalRecords, setTotalRecords] = useState(0)
   const [loading, setLoading] = useState(true)
   const [activeTabId, setActiveTabId] = useState<number | null>(null)
   const [isOnAISite, setIsOnAISite] = useState(false)
+  const [dataVersion, setDataVersion] = useState(0)
   const { theme } = useTheme()
   const tk = getThemeTokens(theme)
   const { t } = useTranslation()
@@ -56,12 +73,14 @@ function App() {
     return () => clearTimeout(timeoutId)
   }, [])
 
-  // Keep totalRecords in sync with live STATUS_UPDATE broadcasts
+  // Keep totalRecords in sync with live STATUS_UPDATE broadcasts, and bump
+  // dataVersion so MemoryTableView reloads its record list automatically.
   useEffect(() => {
     const listener = (message: unknown) => {
       const msg = message as StatusUpdate
       if (msg.type !== 'STATUS_UPDATE') return
       setTotalRecords(msg.payload.totalRecords)
+      setDataVersion((v) => v + 1)
     }
     chrome.runtime.onMessage.addListener(listener)
     return () => chrome.runtime.onMessage.removeListener(listener)
@@ -77,6 +96,7 @@ function App() {
         }
       }
     )
+    setDataVersion((v) => v + 1)
   }, [])
 
   // Send OPEN_MEMORY_PANEL to the active AI tab, then close the popup
@@ -107,7 +127,7 @@ function App() {
           justifyContent: 'center',
           color: tk.textMuted,
           fontSize: 13,
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
           backgroundColor: tk.bg,
         }}
       >
@@ -116,8 +136,13 @@ function App() {
     )
   }
 
+  // Slot order: settings(0) | main(1) | detail(2)
+  // Settings slides in from the left, detail slides in from the right — no cross-over.
+  const slideIndex = view === 'settings' ? 0 : view === 'main' ? 1 : 2
+
   return (
     <div
+      className="aim-panel"
       style={{
         width: POPUP_WIDTH,
         minWidth: POPUP_WIDTH,
@@ -125,41 +150,42 @@ function App() {
         backgroundColor: tk.bg,
       }}
     >
-      {view === 'settings' ? (
-        <SettingsView onBack={goBack} onAllDeleted={refreshTotal} />
-      ) : (
-        /* Sliding panel: two slots side by side, translateX controls which is visible */
-        <div
-          style={{
-            display: 'flex',
-            width: POPUP_WIDTH * 2,
-            transform: view === 'main' ? 'translateX(0)' : `translateX(-${POPUP_WIDTH}px)`,
-            transition: 'transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          {/* Slot 0: Main menu */}
-          <div style={{ width: POPUP_WIDTH, flexShrink: 0 }}>
-            <MainMenuView
-              totalRecords={totalRecords}
-              onOpenMemory={() => navigateTo('memory')}
-              onOpenFolder={() => navigateTo('folder')}
-              isOnAISite={isOnAISite}
-              onOpenPanel={handleOpenPanel}
-              onImported={refreshTotal}
-              onOpenSettings={openSettings}
-            />
-          </div>
+      <div
+        style={{
+          display: 'flex',
+          width: POPUP_WIDTH * 3,
+          transform: `translateX(-${slideIndex * POPUP_WIDTH}px)`,
+          transition: 'transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        {/* Slot 0: Settings (slides in from left) */}
+        <div style={{ width: POPUP_WIDTH, flexShrink: 0, opacity: view === 'settings' ? 1 : 0, transition: 'opacity 0.24s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease' }}>
+          <SettingsView onBack={goBack} onAllDeleted={refreshTotal} />
+        </div>
 
-          {/* Slot 1: Detail view (memory or folder) */}
-          <div style={{ width: POPUP_WIDTH, flexShrink: 0, maxHeight: 580, overflowY: 'auto' }}>
-            {detailView === 'memory' ? (
-              <MemoryTableView onBack={goBack} onDeleted={refreshTotal} />
-            ) : (
-              <FolderView onBack={goBack} width={POPUP_WIDTH} />
-            )}
+        {/* Slot 1: Main menu (center) */}
+        <div style={{ width: POPUP_WIDTH, flexShrink: 0, opacity: view === 'main' ? 1 : 0, transition: 'opacity 0.24s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease' }}>
+          <MainMenuView
+            totalRecords={totalRecords}
+            onOpenMemory={() => navigateTo('memory')}
+            onOpenFolder={() => navigateTo('folder')}
+            isOnAISite={isOnAISite}
+            onOpenPanel={handleOpenPanel}
+            onImported={refreshTotal}
+            onOpenSettings={openSettings}
+          />
+        </div>
+
+        {/* Slot 2: Detail view — both rendered, toggled to prevent flash during slide-back */}
+        <div style={{ width: POPUP_WIDTH, flexShrink: 0, position: 'relative', opacity: view === 'memory' || view === 'folder' ? 1 : 0, transition: 'opacity 0.24s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease' }}>
+          <div style={{ display: detailView === 'memory' ? 'flex' : 'none', flexDirection: 'column', height: 580 }}>
+            <MemoryTableView onBack={goBack} onDeleted={refreshTotal} reloadKey={dataVersion} maxHeight={580} />
+          </div>
+          <div style={{ display: detailView === 'folder' ? 'block' : 'none', maxHeight: 580, overflowY: 'auto' }}>
+            <FolderView onBack={goBack} width={POPUP_WIDTH} />
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

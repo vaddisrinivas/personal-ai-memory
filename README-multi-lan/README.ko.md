@@ -22,11 +22,13 @@
 
 ## 설치
 
-### 일반 사용자 — Release에서 로드
+### 일반 사용자 — Chrome Web Store
 
-> _Chrome Web Store 등록 예정입니다._
+[Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh)에서 바로 설치할 수 있습니다.
 
-그 전까지는 수동으로 설치하세요:
+> **참고:** Chrome Web Store 버전은 최신 릴리스보다 업데이트가 느릴 수 있습니다. 최신 기능을 사용하려면 [Releases](../../releases) 페이지에서 최신 `.zip`을 다운로드하여 수동으로 로드하세요 (아래 참조).
+
+### Release에서 수동 설치
 
 1. [Releases](../../releases) 페이지에서 최신 `.zip` 파일 다운로드
 2. 압축 해제
@@ -65,14 +67,14 @@ pnpm build
 |------|------|
 | **수동 캡처** | ChatGPT / Claude / Gemini 대화를 자동으로 가로채 수동 조작 없이 저장 |
 | **하이브리드 검색** | 시맨틱 벡터 검색(시간 감쇠) × BM25 키워드 검색, RRF 융합 |
-| **원클릭 리콜** | ChatGPT 입력창 옆 Recall 버튼 클릭으로 관련 기억을 RAG 프롬프트로 주입 |
+| **원클릭 리콜** | ChatGPT / Claude 입력창 옆 Recall 버튼 클릭으로 관련 기억을 RAG 프롬프트로 주입 |
 | **로컬 백업** | 전체 백업을 JSON으로 내보내기 / 가져오기(임베딩 벡터 포함) |
 | **즐겨찾기 프롬프트** | Trie 자동완성, 폴더 관리, 드래그 앤 드롭 지원 |
 | **플로팅 패널** | 모든 AI 사이트의 드래그 가능한 메모리 패널 |
 | **8개 UI 언어** | zh-TW · zh-CN · en · ja · ko · es · fr · de — 자동 감지 |
 | **다크 / 라이트 테마** | Apple Liquid Glass 스타일 전환 |
 
-**지원 플랫폼:** ChatGPT(`chat.openai.com` / `chatgpt.com`) · Gemini(`gemini.google.com`) · Claude — _개발 중_
+**지원 플랫폼:** ChatGPT(`chat.openai.com` / `chatgpt.com`) · Gemini(`gemini.google.com`) · Claude(`claude.ai`)
 ---
 
 # ChatGPT/Gemini 채팅 기록을 내보내는 방법
@@ -115,7 +117,7 @@ ChatGPT / Claude / Gemini에서 대화
         │
         │  나중에 — 새 대화 시작
         ▼
-ChatGPT 입력창 옆 🧠 Recall 클릭
+ChatGPT / Claude 입력창 옆 🧠 Recall 클릭
         │
         ▼
 하이브리드 검색:
@@ -238,6 +240,22 @@ pnpm test              # 단위 테스트 (Vitest)
 pnpm test:integration  # 통합 테스트
 pnpm test:e2e          # E2E 테스트 (Playwright — 빌드 필요)
 ```
+
+---
+
+## 업데이트 내역
+
+### v0.0.2 — 2026-03-01
+- **신기능:** Claude 웹(`claude.ai`) 완전 지원 — 대화 캡처, Recall 버튼 주입, 플로팅 메모리 패널이 Claude에서 작동
+
+### v0.0.1 — 최초 릴리스
+- ChatGPT · Gemini 대화 캡처
+- 벡터 + BM25 하이브리드 검색 (RRF 융합)
+- 원클릭 Recall 버튼 (ChatGPT)
+- 즐겨찾기 프롬프트 (Trie 자동완성, 드래그 앤 드롭 폴더)
+- JSON 백업 내보내기 / 가져오기
+- 플로팅 메모리 패널
+- 8개 UI 언어, 다크 / 라이트 테마
 
 
 ---

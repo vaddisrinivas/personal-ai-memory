@@ -8,8 +8,10 @@ import type {
 import { useTranslation } from '../../i18n/LanguageContext'
 import { useTheme } from '../../i18n/ThemeContext'
 import { getThemeTokens } from '../../ui/theme'
-import { ChevronLeftIcon, ChevronDownIcon, ChevronRightIcon } from '../../ui/icons'
+import { ChevronLeftIcon, ChevronDownIcon, ChevronRightIcon, ArrowDownWideNarrowIcon, ArrowUpWideNarrowIcon } from '../../ui/icons'
 import * as S from '../../ui/styles'
+
+type ProviderFilter = 'all' | 'openai' | 'anthropic' | 'google'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -31,11 +33,15 @@ const roleLabel: Record<string, string> = {
   assistant: 'AI',
 }
 
+function getProvider(sessionId: string): string {
+  return sessionId.split(':')[0]?.toLowerCase() ?? ''
+}
+
 function formatProviderLabel(sessionId: string): string {
-  const provider = sessionId.split(':')[0]?.toLowerCase() ?? ''
-  if (provider === 'openai') return 'openAI'
-  if (provider === 'anthropic') return 'Anthropic'
-  if (provider === 'google') return 'Google'
+  const provider = getProvider(sessionId)
+  if (provider === 'openai') return 'ChatGPT'
+  if (provider === 'anthropic') return 'Claude'
+  if (provider === 'google') return 'Gemini'
   return provider || 'Unknown'
 }
 
@@ -47,7 +53,7 @@ function groupBySessionId(records: MemoryRecord[]): Map<string, MemoryRecord[]> 
     map.set(r.sessionId, list)
   }
   for (const list of map.values()) {
-    list.sort((a, b) => a.createdAt - b.createdAt)
+    list.sort((a, b) => a.timestamp - b.timestamp)
   }
   return map
 }
@@ -59,6 +65,7 @@ interface DisplayRecord {
   chunkIds: string[]
   role: MemoryRecord['role']
   content: string
+  timestamp: number
   createdAt: number
   isChunked: boolean
   chunkCount: number
@@ -90,6 +97,7 @@ function mergeChunks(records: MemoryRecord[]): DisplayRecord[] {
       chunkIds: [r.id],
       role: r.role,
       content: r.content,
+      timestamp: r.timestamp,
       createdAt: r.createdAt,
       isChunked: false,
       chunkCount: 1,
@@ -102,13 +110,15 @@ function mergeChunks(records: MemoryRecord[]): DisplayRecord[] {
       chunkIds: chunks.map((c) => c.id),
       role: chunks[0].role,
       content: chunks.map((c) => c.content).join(''),
+      timestamp: chunks[0].timestamp,
       createdAt: chunks[0].createdAt,
       isChunked: true,
       chunkCount: chunks.length,
     })
   }
 
-  return result.sort((a, b) => a.createdAt - b.createdAt)
+  // Sort messages within a session by their actual conversation timestamp
+  return result.sort((a, b) => a.timestamp - b.timestamp)
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -118,9 +128,17 @@ interface MemoryTableViewProps {
   onBack?: () => void
   width?: number
   maxHeight?: number
+  reloadKey?: number
 }
 
-export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryTableViewProps) {
+const PROVIDER_FILTERS: { key: ProviderFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'openai', label: 'ChatGPT' },
+  { key: 'anthropic', label: 'Claude' },
+  { key: 'google', label: 'Gemini' },
+]
+
+export function MemoryTableView({ onDeleted, onBack, width, maxHeight, reloadKey }: MemoryTableViewProps) {
   const { t } = useTranslation()
   const { theme } = useTheme()
   const tk = getThemeTokens(theme)
@@ -133,14 +151,32 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [titles, setTitles] = useState<Map<string, string>>(new Map())
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortDesc, setSortDesc] = useState(true)
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all')
+  // Tracks sessions the user has manually collapsed while a search is active
+  const [searchCollapsed, setSearchCollapsed] = useState<Set<string>>(new Set())
 
-  const toggleSession = useCallback((sessionId: string) => {
-    setCollapsedSessions((prev) => {
-      const next = new Set(prev)
-      if (next.has(sessionId)) next.delete(sessionId)
-      else next.add(sessionId)
-      return next
-    })
+  // Reset search-mode collapse state when the query is cleared
+  useEffect(() => {
+    if (!searchQuery) setSearchCollapsed(new Set())
+  }, [searchQuery])
+
+  const toggleSession = useCallback((sessionId: string, isSearching: boolean) => {
+    if (isSearching) {
+      setSearchCollapsed((prev) => {
+        const next = new Set(prev)
+        if (next.has(sessionId)) next.delete(sessionId)
+        else next.add(sessionId)
+        return next
+      })
+    } else {
+      setCollapsedSessions((prev) => {
+        const next = new Set(prev)
+        if (next.has(sessionId)) next.delete(sessionId)
+        else next.add(sessionId)
+        return next
+      })
+    }
   }, [])
 
   const copyContent = useCallback((text: string, id: string) => {
@@ -197,7 +233,7 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
 
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, reloadKey])
 
   const handleDelete = useCallback(
     (displayId: string, chunkIds: string[]) => {
@@ -226,13 +262,19 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
   )
 
   const groups = groupBySessionId(records)
-  const allSessionIds = Array.from(groups.keys()).sort((a, b) => {
-    const aMax = Math.max(...(groups.get(a) ?? []).map((r) => r.createdAt))
-    const bMax = Math.max(...(groups.get(b) ?? []).map((r) => r.createdAt))
-    return bMax - aMax
-  })
+
+  // Provider filter first, then sort
+  const allSessionIds = Array.from(groups.keys())
+    .filter((sid) => providerFilter === 'all' || getProvider(sid) === providerFilter)
+    .sort((a, b) => {
+      const aMax = Math.max(...(groups.get(a) ?? []).map((r) => r.timestamp))
+      const bMax = Math.max(...(groups.get(b) ?? []).map((r) => r.timestamp))
+      return sortDesc ? bMax - aMax : aMax - bMax
+    })
 
   const q = searchQuery.trim().toLowerCase()
+
+  // Filter sessions by search query
   const sessionIds = q
     ? allSessionIds.filter((sid) => {
         const title = titles.get(sid) ?? ''
@@ -242,36 +284,55 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
       })
     : allSessionIds
 
-  // When used inside the floating panel, the component owns its own scroll region
-  // so the back header stays pinned at the top regardless of scroll position.
-  const isFloating = !!onBack
+  // The component always owns its scroll region (both popup and floating panel modes).
+  // back header + search bar + provider pills are sticky at the top; only the list scrolls.
+  const containerStyle: React.CSSProperties = {
+    ...styles.container,
+    backgroundColor: tk.bg,
+    ...(width ? { width, maxWidth: width } : {}),
+    display: 'flex',
+    flexDirection: 'column',
+    // Fill the height allocated by the parent (popup: fixed 580px flex container;
+    // floating panel: flex:1 with minHeight:0)
+    flex: 1,
+    minHeight: 0,
+    ...(maxHeight != null ? { maxHeight } : {}),
+  }
 
   const backHeader = onBack ? (
     <div
       style={{
-        ...S.viewHeader,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
         flexShrink: 0,
-        // Sticky within the panel's scroll container
-        position: 'sticky',
-        top: 0,
-        zIndex: 1,
-        backgroundColor: 'inherit',
       }}
     >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          type="button"
+          style={{ ...S.iconBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
+          onClick={onBack}
+        >
+          <ChevronLeftIcon />
+        </button>
+        <span style={{ ...S.viewTitle, paddingLeft: 2, color: tk.text }}>{t.memoryList}</span>
+      </div>
       <button
         type="button"
-        style={{ ...S.iconBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
-        onClick={onBack}
+        title={sortDesc ? t.sortNewest : t.sortOldest}
+        onClick={() => setSortDesc((prev) => !prev)}
+        style={{ ...S.iconBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.textMuted }}
       >
-        <ChevronLeftIcon />
+        {sortDesc ? <ArrowDownWideNarrowIcon /> : <ArrowUpWideNarrowIcon />}
       </button>
-      <span style={{ ...S.viewTitle, paddingLeft: 2, color: tk.text }}>{t.memoryList}</span>
     </div>
   ) : null
 
   if (loading) {
     return (
-      <div style={{ ...S.viewContainerLoose, backgroundColor: tk.bg }}>
+      <div style={containerStyle}>
         {backHeader}
         <div style={{ ...styles.loading, color: tk.textMuted }}>{t.loadingMemories}</div>
       </div>
@@ -280,60 +341,97 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
 
   if (records.length === 0) {
     return (
-      <div style={{ ...S.viewContainerLoose, backgroundColor: tk.bg }}>
+      <div style={containerStyle}>
         {backHeader}
         <div style={{ ...styles.empty, color: tk.textMuted }}>{t.noMemories}</div>
       </div>
     )
   }
 
-  const containerStyle: React.CSSProperties = {
-    ...styles.container,
-    backgroundColor: tk.bg,
-    ...(width ? { width, maxWidth: width } : {}),
-    ...(isFloating ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : {}),
-  }
-
-  const effectiveMaxHeight = maxHeight ?? (onBack ? 500 : 360)
-  // In floating mode the scroll div grows to fill remaining space;
-  // in popup mode it uses the legacy maxHeight cap.
-  const scrollStyle: React.CSSProperties = isFloating
-    ? { ...styles.scroll, flex: 1, minHeight: 0, maxHeight: 'none', overflowY: 'auto' }
-    : { ...styles.scroll, maxHeight: effectiveMaxHeight }
-
   return (
     <div style={containerStyle}>
-      {backHeader}
-      <div style={{ paddingLeft: 4, paddingRight: 4, paddingBottom: 8, flexShrink: 0 }}>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t.searchMemories}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '7px 10px',
-            fontSize: 12,
-            borderRadius: 8,
-            border: `1px solid ${tk.border}`,
-            backgroundColor: tk.inputBg,
-            color: tk.text,
-            outline: 'none',
-            fontFamily: 'inherit',
-          }}
-        />
+      {/* ── Sticky header area ── */}
+      <div style={{ flexShrink: 0 }}>
+        {backHeader}
+        {/* Search bar */}
+        <div style={{ paddingTop: 8, paddingBottom: 6 }}>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t.searchMemories}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 10px',
+              fontSize: 12,
+              borderRadius: 8,
+              border: `1px solid ${tk.border}`,
+              backgroundColor: tk.inputBg,
+              color: tk.text,
+              outline: 'none',
+              fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        {/* Provider filter pills */}
+        <div style={{ display: 'flex', gap: 6, paddingBottom: 8, flexWrap: 'wrap' }}>
+          {PROVIDER_FILTERS.map(({ key, label }) => {
+            const active = providerFilter === key
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setProviderFilter(key)}
+                style={{
+                  fontSize: 11,
+                  fontWeight: active ? 600 : 400,
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  border: `1px solid ${active ? tk.accent : tk.border}`,
+                  backgroundColor: active ? tk.accent : tk.btnBg,
+                  color: active ? '#fff' : tk.textMuted,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
+          {/* Sort toggle when no back button (standalone popup w/o header) */}
+          {!onBack && (
+            <button
+              type="button"
+              title={sortDesc ? t.sortNewest : t.sortOldest}
+              onClick={() => setSortDesc((prev) => !prev)}
+              style={{
+                marginLeft: 'auto',
+                ...S.iconBtn,
+                backgroundColor: tk.btnBg,
+                borderColor: tk.border,
+                color: tk.textMuted,
+              }}
+            >
+              {sortDesc ? <ArrowDownWideNarrowIcon /> : <ArrowUpWideNarrowIcon />}
+            </button>
+          )}
+        </div>
+        <div style={{ ...styles.sectionTitle, color: tk.textMuted }}>{t.allMemories}</div>
       </div>
-      <div style={{ ...styles.sectionTitle, color: tk.textMuted, paddingLeft: 4, paddingRight: 4, flexShrink: 0 }}>
-        {t.allMemories}
-      </div>
-      <div style={{ ...scrollStyle, paddingLeft: 4, paddingRight: 4 }}>
-        {sessionIds.length === 0 && q ? (
+
+      {/* ── Scrollable list ── */}
+      <div style={{ ...styles.scroll, margin: '0 -16px', padding: '0 16px' }}>
+        {sessionIds.length === 0 && (q || providerFilter !== 'all') ? (
           <div style={{ ...styles.empty, color: tk.textMuted }}>{t.searchNoResults}</div>
         ) : (
           sessionIds.map((sessionId) => {
             const list = groups.get(sessionId) ?? []
-            const isCollapsed = q ? false : collapsedSessions.has(sessionId)
+            // When searching: auto-expand by default, but respect manual collapse by user
+            const isCollapsed = q
+              ? searchCollapsed.has(sessionId)
+              : collapsedSessions.has(sessionId)
             const title = titles.get(sessionId)
             const providerLabel = formatProviderLabel(sessionId)
             const displayText = title
@@ -346,7 +444,7 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
                 <button
                   type="button"
                   style={{ ...styles.groupHeaderBtn, color: tk.textMuted }}
-                  onClick={() => toggleSession(sessionId)}
+                  onClick={() => toggleSession(sessionId, !!q)}
                   aria-expanded={!isCollapsed}
                 >
                   <span style={{ ...styles.groupHeaderCaret, color: tk.textTertiary }}>
@@ -369,6 +467,18 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
                         onMouseEnter={() => setHoverId(dr.id)}
                         onMouseLeave={() => setHoverId(null)}
                       >
+                        {/* Delete X — top-right corner, always visible */}
+                        <button
+                          style={{ ...styles.deleteXBtn, color: tk.textTertiary }}
+                          disabled={deletingId === dr.id}
+                          onClick={() => handleDelete(dr.id, dr.chunkIds)}
+                          type="button"
+                          title={t.deleteBtn}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.errorText }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = tk.textTertiary }}
+                        >
+                          {deletingId === dr.id ? '…' : '×'}
+                        </button>
                         <div style={styles.rowMain}>
                           <span style={{ ...styles.role, color: tk.textMuted }}>
                             {roleLabel[dr.role] ?? dr.role}
@@ -378,36 +488,27 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
                               </span>
                             )}
                           </span>
-                          <span style={{ ...styles.time, color: tk.textTertiary }}>{formatLocalTime(dr.createdAt)}</span>
+                          <span style={{ ...styles.time, color: tk.textTertiary, paddingRight: 20 }}>{formatLocalTime(dr.timestamp)}</span>
                         </div>
-                        <div style={styles.rowContentLine}>
-                          <div
-                            style={{ ...styles.content, color: tk.text }}
-                            onClick={() => toggleExpanded(dr.id)}
-                            title={expandedIds.has(dr.id) ? undefined : dr.content}
+                        <div
+                          style={{ ...styles.content, color: tk.text }}
+                          onClick={() => toggleExpanded(dr.id)}
+                          title={expandedIds.has(dr.id) ? undefined : dr.content}
+                        >
+                          {expandedIds.has(dr.id) ? dr.content : truncate(dr.content)}
+                        </div>
+                        {/* Copy button — bottom-right on its own row */}
+                        <div style={styles.bottomRow}>
+                          <button
+                            type="button"
+                            style={{ ...styles.copyBtn, color: tk.accent }}
+                            onClick={() => copyContent(dr.content, dr.id)}
+                            title={t.copyBtn}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'underline' }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.textDecoration = 'none' }}
                           >
-                            {expandedIds.has(dr.id) ? dr.content : truncate(dr.content)}
-                          </div>
-                          <div style={styles.actions}>
-                            {(hoverId === dr.id || deletingId === dr.id) && (
-                              <button
-                                style={{ ...styles.deleteBtn, color: tk.errorText }}
-                                disabled={deletingId === dr.id}
-                                onClick={() => handleDelete(dr.id, dr.chunkIds)}
-                                type="button"
-                              >
-                                {deletingId === dr.id ? t.deleting : t.deleteBtn}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              style={{ ...styles.copyBtn, color: tk.accent }}
-                              onClick={() => copyContent(dr.content, dr.id)}
-                              title={t.copyBtn}
-                            >
-                              {copiedId === dr.id ? t.copied : t.copyBtn}
-                            </button>
-                          </div>
+                            {copiedId === dr.id ? t.copied : t.copyBtn}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -425,36 +526,9 @@ export function MemoryTableView({ onDeleted, onBack, width, maxHeight }: MemoryT
 const styles: Record<string, React.CSSProperties> = {
   container: {
     marginTop: 0,
-    paddingLeft: 4,
-    paddingRight: 4,
-    paddingBottom: 8,
+    padding: '12px 16px 8px',
     boxSizing: 'border-box',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
-  },
-  backHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    padding: '10px 12px',
-    borderBottom: '1px solid',
-    marginBottom: 10,
-  },
-  backBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 13,
-    padding: '2px 6px 2px 0',
-    fontWeight: 500,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 2,
-    fontFamily: 'inherit',
-  },
-  backTitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    letterSpacing: '-0.01em',
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
   },
   loading: {
     padding: 12,
@@ -475,8 +549,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 8,
   },
   scroll: {
-    maxHeight: 360,
+    flex: 1,
     overflowY: 'auto',
+    minHeight: 0,
   },
   group: {
     marginBottom: 14,
@@ -493,7 +568,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     textAlign: 'left',
     fontSize: 11,
-    fontFamily: 'ui-monospace, monospace',
+    fontFamily: 'inherit',
   },
   groupHeaderCaret: {
     flexShrink: 0,
@@ -508,18 +583,35 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 6,
   },
-  rowContentLine: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
-  },
   row: {
     border: '1px solid',
     borderRadius: 10,
     padding: '10px 14px',
     position: 'relative',
     transition: 'background-color 0.1s ease',
+  },
+  deleteXBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    border: 'none',
+    background: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 15,
+    lineHeight: 1,
+    padding: 0,
+    fontFamily: 'inherit',
+  },
+  bottomRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginTop: 4,
   },
   rowMain: {
     display: 'flex',
@@ -546,28 +638,13 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     letterSpacing: '-0.01em',
   },
-  actions: {
-    display: 'flex',
-    gap: 8,
-    justifyContent: 'flex-end',
-    marginTop: 4,
-  },
   copyBtn: {
     fontSize: 11,
     background: 'none',
     border: 'none',
     cursor: 'pointer',
     padding: '2px 6px',
-    textDecoration: 'underline',
-    fontFamily: 'inherit',
-  },
-  deleteBtn: {
-    fontSize: 11,
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '2px 6px',
-    textDecoration: 'underline',
+    textDecoration: 'none',
     fontFamily: 'inherit',
   },
 }
