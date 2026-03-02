@@ -224,13 +224,16 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 
 ## Changelog
 
+### v0.0.3 — 2026-03-02
+- **New:** Perplexity (`perplexity.ai`) support — conversations are silently captured while you browse. Note: Perplexity itself does not support user data export, so each conversation must be visited individually to be collected.
+
 ### v0.0.2 — 2026-03-01
 - **New:** Full Claude web support (`claude.ai`) — conversation capture, Recall button injection, and floating memory panel now work on Claude
 
-### v0.0.1 — Initial Release
+### v0.0.1 — Initial Release 2026-02-24
 - ChatGPT and Gemini conversation capture
 - Hybrid vector + BM25 search with RRF fusion
-- One-click Recall button (ChatGPT)
+- One-click Recall button (ChatGPT, Gemini)
 - Favourite Prompts with Trie autocomplete and drag-and-drop folders
 - Export / import JSON backup
 - Floating memory panel

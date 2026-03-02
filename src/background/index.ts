@@ -15,6 +15,7 @@ import { MODEL_NAME, EMBEDDING_VERSION } from './embedding'
 import { ChatGPTAdapter } from './adapters/chatgpt'
 import { ClaudeAdapter } from './adapters/claude'
 import { GeminiAdapter } from './adapters/gemini'
+import { PerplexityAdapter } from './adapters/perplexity'
 import type { IAdapter } from './adapters/base'
 import { db, isCaptureEnabled, isQuotaExceeded, safeAddRecord } from './db'
 import type {
@@ -54,6 +55,7 @@ const adapters: IAdapter[] = [
   new ChatGPTAdapter(),
   new ClaudeAdapter(),
   new GeminiAdapter(),
+  new PerplexityAdapter(),
 ]
 
 function findAdapter(url: string): IAdapter | undefined {
@@ -271,15 +273,28 @@ export async function embedBatchViaOffscreen(
 
 // ─── Embedding Queue (US2) ────────────────────────────────────────────────────
 
-function queueEmbedding(record: MemoryRecord): void {
+const EMBED_RETRY_DELAYS_MS = [2000, 5000, 15000]
+
+function queueEmbedding(record: MemoryRecord, attempt = 0): void {
   embedViaOffscreen(record.content)
     .then((embedding) =>
       db.updateEmbedding(record.id, embedding, MODEL_NAME, EMBEDDING_VERSION)
     )
-    .catch((err) => {
-      // Model unavailable or offscreen error — record remains without embedding
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      const isConnectionError = msg.includes('Receiving end does not exist') ||
+        msg.includes('Could not establish connection')
+
+      // Retry transient connection errors (offscreen document not ready yet)
+      if (isConnectionError && attempt < EMBED_RETRY_DELAYS_MS.length) {
+        const delay = EMBED_RETRY_DELAYS_MS[attempt]
+        setTimeout(() => queueEmbedding(record, attempt + 1), delay)
+        return
+      }
+
+      // Permanent failure — record stays at hasEmbedding: 0 for startup sweep
       console.warn('[AI Memory] Embedding failed for record', record.id, err)
-      void db.logError('EMBEDDING_FAILED', { recordId: record.id, error: String(err) })
+      void db.logError('EMBEDDING_FAILED', { recordId: record.id, error: msg })
     })
 }
 
@@ -760,6 +775,7 @@ const AI_ORIGINS = [
   'https://chatgpt.com',
   'https://claude.ai',
   'https://gemini.google.com',
+  'https://www.perplexity.ai',
 ]
 
 function injectMainWorld(tabId: number): void {
@@ -776,6 +792,102 @@ function injectMainWorld(tabId: number): void {
     })
 }
 
+// ─── Perplexity background-fetch fallback ─────────────────────────────────────
+// When Cloudflare Access blocks Perplexity's restricted static JS on page reload,
+// the SPA may not fully initialise, so the page-level fetch to /rest/thread/<slug>
+// is never made and our fetch interceptor never fires.
+// Solution: the background SW proactively fetches the thread REST endpoint on
+// tab-complete for Perplexity thread pages. The extension has host_permissions for
+// www.perplexity.ai, so `credentials: 'include'` carries the user's auth cookies.
+
+/**
+ * Extracts the thread slug from a Perplexity thread page URL.
+ * Matches https://www.perplexity.ai/search/<slug>
+ */
+function extractPerplexityThreadSlug(pageUrl: string): string | null {
+  try {
+    const u = new URL(pageUrl)
+    if (u.hostname !== 'www.perplexity.ai') return null
+    const m = u.pathname.match(/^\/search\/([^/]+)$/)
+    return m ? decodeURIComponent(m[1]) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Proactively fetches Perplexity thread history from the background service worker.
+ * This runs independently of the page's JS, bypassing any Cloudflare Access issues
+ * that might prevent the page from making the request itself.
+ */
+async function maybeFetchPerplexityThreadHistory(pageUrl: string): Promise<void> {
+  const slug = extractPerplexityThreadSlug(pageUrl)
+  if (!slug) return
+
+  // Build REST URL with the same block-use-cases the SPA normally requests
+  const params = new URLSearchParams({
+    with_parent_info: 'true',
+    with_schematized_response: 'true',
+    version: '2.18',
+    source: 'default',
+    limit: '50',
+    offset: '0',
+    from_first: 'true',
+  })
+  for (const useCase of [
+    'answer_modes', 'media_items', 'knowledge_cards', 'inline_entity_cards',
+    'place_widgets', 'finance_widgets', 'news_widgets', 'shopping_widgets',
+    'search_result_widgets', 'inline_images', 'inline_assets', 'diff_blocks',
+    'inline_knowledge_cards', 'answer_tabs', 'preserve_latex',
+    'in_context_suggestions', 'inline_claims', 'unified_assets',
+  ]) {
+    params.append('supported_block_use_cases', useCase)
+  }
+
+  const restUrl = `https://www.perplexity.ai/rest/thread/${encodeURIComponent(slug)}?${params.toString()}`
+
+  try {
+    const res = await fetch(restUrl, {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        Referer: pageUrl,
+      },
+    })
+
+    if (!res.ok) {
+      console.warn('[AI Memory] Perplexity bg fetch failed, status:', res.status, 'slug:', slug)
+      return
+    }
+
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      console.warn('[AI Memory] Perplexity bg fetch non-JSON response:', contentType, 'slug:', slug)
+      return
+    }
+
+    const data: unknown = await res.json()
+    if (!data || typeof data !== 'object') return
+
+    // Only proceed if it looks like a valid thread history response
+    const d = data as Record<string, unknown>
+    if (d['status'] !== 'success' || !Array.isArray(d['entries'])) return
+
+    const result = await handleCaptureMessage({
+      type: 'CAPTURE_MESSAGE',
+      payload: {
+        provider: 'perplexity',
+        rawData: data,
+        url: restUrl,
+        timestamp: Date.now(),
+      },
+    })
+    console.log('[AI Memory] Perplexity bg fetch captured thread history:', slug, result)
+  } catch (err) {
+    console.warn('[AI Memory] Perplexity bg fetch error for slug:', slug, err)
+  }
+}
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const status = changeInfo.status
   const url = tab.url ?? ''
@@ -784,6 +896,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // Also inject on 'complete' to catch SPAs that may have replaced fetch after initial load.
   if (status === 'loading' || status === 'complete') {
     injectMainWorld(tabId)
+  }
+  // Fallback: proactively fetch Perplexity thread history from the background SW
+  // in case the page's JS fails to run (e.g. Cloudflare Access blocking static files).
+  if (status === 'complete' && url.includes('www.perplexity.ai/search/')) {
+    void maybeFetchPerplexityThreadHistory(url)
   }
 })
 
@@ -815,6 +932,7 @@ const AI_ORIGINS_FOR_PANEL = [
   'https://chatgpt.com',
   'https://claude.ai',
   'https://gemini.google.com',
+  'https://www.perplexity.ai',
 ]
 
 chrome.action.onClicked.addListener((tab) => {
@@ -837,6 +955,11 @@ chrome.action.onClicked.addListener((tab) => {
 // Rebuild MiniSearch keyword index from Dexie on every Service Worker startup.
 // The SW can be suspended and revived at any time; in-memory state is wiped on each wake.
 void hydrateSearchIndex()
+
+// Retry any records that failed to embed during a previous session (e.g. offscreen
+// document wasn't ready when the capture came in). Delay slightly so the offscreen
+// document has time to spin up before we hit it with a batch.
+setTimeout(() => { void processPendingEmbeddings() }, 8000)
 
 // ─── Dev Helper: test SEARCH_MEMORIES from Background console ─────────────────
 // Run testSearch('關鍵字', 5) in Service Worker console.

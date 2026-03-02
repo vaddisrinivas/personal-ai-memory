@@ -251,6 +251,9 @@ pnpm test:e2e          # Tests E2E (Playwright — exécuter pnpm build d'abord)
 
 ## Journal des modifications
 
+### v0.0.3 — 2026-03-02
+- **Nouveau :** Support de Perplexity (`perplexity.ai`) — les conversations sont capturées silencieusement pendant la navigation. Remarque : Perplexity ne prend pas en charge l'export de données utilisateur, chaque conversation doit donc être ouverte individuellement pour être collectée.
+
 ### v0.0.2 — 2026-03-01
 - **Nouveau :** Support complet de Claude web (`claude.ai`) — capture de conversations, injection du bouton Recall et panneau mémoire flottant fonctionnent désormais sur Claude
 

@@ -18,6 +18,7 @@ export const config: PlasmoCSConfig = {
     'https://claude.ai/new/',
     'https://claude.ai/chat/*',
     'https://gemini.google.com/*',
+    'https://www.perplexity.ai/*',
   ],
 }
 
@@ -41,7 +42,17 @@ const SESSION_ID_EXTRACTORS: Record<string, (data: Record<string, unknown>) => s
   openai:      (data) => (data['conversationId'] ?? data['conversation_id']) as string | undefined,
   anthropic:   (data) => (data['conversationId'] ?? data['id']) as string | undefined,
   google:      (data) => data['conversationId'] as string | undefined,
-  // xai / perplexity entries added here when those providers are implemented
+  perplexity:  (data) => {
+    // Live SSE assembled message: has conversationId
+    if (typeof data['conversationId'] === 'string') return data['conversationId'] as string
+    // Thread history REST response: { status: 'success', entries: [...] }
+    // Extract context_uuid from first entry
+    if (Array.isArray(data['entries']) && data['entries'].length > 0) {
+      const first = data['entries'][0] as Record<string, unknown>
+      if (typeof first['context_uuid'] === 'string') return first['context_uuid'] as string
+    }
+    return undefined
+  },
 }
 
 /**
@@ -108,8 +119,8 @@ let lastTitle = document.title
  */
 function getConversationIdFromUrl(): string | null {
   const path = window.location.pathname
-  // Match the last UUID-like or alphanumeric segment after /c/, /chat/, /conversation/
-  const m = path.match(/\/(?:c|chat|conversation)s?\/([^/]+)/)
+  // Match the last UUID-like or alphanumeric segment after /c/, /chat/, /conversation/, /search/
+  const m = path.match(/\/(?:c|chat|conversation|search)s?\/([^/]+)/)
   return m ? m[1] : null
 }
 
@@ -203,6 +214,33 @@ window.addEventListener('message', (e: MessageEvent) => {
       return
     }
 
+    // Handle Perplexity title_update: route directly to UPDATE_CONVERSATION_TITLE
+    if (
+      p.provider === 'perplexity' &&
+      p.rawData &&
+      typeof p.rawData === 'object' &&
+      (p.rawData as Record<string, unknown>)['type'] === 'title_update'
+    ) {
+      const rawData = p.rawData as Record<string, unknown>
+      const conversationId = rawData['conversationId'] as string | undefined
+      const title = rawData['title'] as string | undefined
+      if (conversationId && title) {
+        const sessionId = `perplexity:${conversationId}`
+        lastSessionId = sessionId
+        chrome.runtime.sendMessage(
+          { type: 'UPDATE_CONVERSATION_TITLE', payload: { sessionId, title } },
+          () => {
+            try {
+              void chrome.runtime.lastError
+            } catch {
+              // Extension context invalidated; ignore
+            }
+          }
+        )
+      }
+      return
+    }
+
     chrome.runtime.sendMessage(
       {
         type: 'CAPTURE_MESSAGE',
@@ -228,7 +266,24 @@ window.addEventListener('message', (e: MessageEvent) => {
         p.rawData &&
         typeof p.rawData === 'object' &&
         Array.isArray((p.rawData as Record<string, unknown>)['chat_messages'])
-      if (!isClaudeHistory) {
+      const isPerplexityThreadHistory =
+        p.provider === 'perplexity' &&
+        p.rawData &&
+        typeof p.rawData === 'object' &&
+        Array.isArray((p.rawData as Record<string, unknown>)['entries'])
+      if (isPerplexityThreadHistory) {
+        // Use thread_title from the first entry for clean title (API title without browser suffix)
+        const entries = (p.rawData as Record<string, unknown>)['entries'] as Array<Record<string, unknown>>
+        const threadTitle = entries[0]?.['thread_title'] as string | undefined
+        if (threadTitle?.trim()) {
+          chrome.runtime.sendMessage(
+            { type: 'UPDATE_CONVERSATION_TITLE', payload: { sessionId, title: threadTitle.trim() } },
+            () => { try { void chrome.runtime.lastError } catch { /* ignore */ } }
+          )
+        } else {
+          updateConversationTitle(sessionId)
+        }
+      } else if (!isClaudeHistory) {
         updateConversationTitle(sessionId)
       }
     }

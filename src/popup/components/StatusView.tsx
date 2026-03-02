@@ -27,6 +27,7 @@ const providerLabel: Record<string, string> = {
   openai: 'ChatGPT',
   anthropic: 'Claude',
   google: 'Gemini',
+  perplexity: 'Perplexity',
 }
 
 export function StatusView({

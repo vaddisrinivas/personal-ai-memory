@@ -247,6 +247,9 @@ pnpm test:e2e          # E2E-Tests (Playwright — erst pnpm build ausführen)
 
 ## Änderungsprotokoll
 
+### v0.0.3 — 2026-03-02
+- **Neu:** Perplexity (`perplexity.ai`) Unterstützung — Gespräche werden beim Browsen still erfasst. Hinweis: Perplexity unterstützt keinen Datenenexport, daher muss jedes Gespräch einzeln geöffnet werden.
+
 ### v0.0.2 — 2026-03-01
 - **Neu:** Vollständige Unterstützung für Claude Web (`claude.ai`) — Gesprächserfassung, Recall-Button-Injektion und schwebendes Speicherpanel funktionieren jetzt auf Claude
 

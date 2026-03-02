@@ -12,6 +12,7 @@ export const config: PlasmoCSConfig = {
     'https://chatgpt.com/*',
     'https://claude.ai/*',
     'https://gemini.google.com/*',
+    'https://www.perplexity.ai/*',
   ],
 }
 

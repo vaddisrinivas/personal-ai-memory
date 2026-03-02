@@ -1,7 +1,7 @@
 {
   "name": "personal-ai-memory",
   "displayName": "Personal AI Memory",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Silent browser extension that captures web-based AI assistant conversations as private, searchable local memories.",
   "author": "Mars Wang",
   "scripts": {
@@ -49,7 +49,8 @@
       "https://chat.openai.com/*",
       "https://chatgpt.com/*",
       "https://claude.ai/*",
-      "https://gemini.google.com/*"
+      "https://gemini.google.com/*",
+      "https://www.perplexity.ai/*"
     ],
     "permissions": [
       "unlimitedStorage",

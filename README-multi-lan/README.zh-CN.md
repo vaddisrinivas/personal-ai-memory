@@ -247,6 +247,9 @@ pnpm test:e2e          # E2E 测试（Playwright — 需先 build）
 
 ## 更新日志
 
+### v0.0.3 — 2026-03-02
+- **新功能：** 支持 Perplexity（`perplexity.ai`）— 浏览时静默捕捉对话。注意：Perplexity 不支持用户数据导出，因此必须逐一点击对话才能收集记录。
+
 ### v0.0.2 — 2026-03-01
 - **新功能：** 完整支持 Claude 网页版（`claude.ai`）— 对话捕获、Recall 按钮注入、浮动记忆面板现已在 Claude 上可用
 
