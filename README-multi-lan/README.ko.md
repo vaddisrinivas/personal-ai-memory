@@ -14,7 +14,7 @@
 
 ---
 
-> ChatGPT / Claude / Gemini 대화를 **자동으로 캡처**하여 브라우저 로컬에 시맨틱 벡터로 저장하는 Chrome 확장 프로그램 — 원클릭 **Recall** 버튼으로 관련 과거 기억을 새 대화에 주입합니다.
+> ChatGPT / Claude / Gemini / Perplexity 대화를 **자동으로 캡처**하여 브라우저 로컬에 시맨틱 벡터로 저장하는 Chrome 확장 프로그램 — 원클릭 **Recall** 버튼으로 관련 과거 기억을 새 대화에 주입합니다.
 >
 > **100% 로컬. 클라우드 없음. 서버 없음. 계정 불필요.**
 
@@ -41,8 +41,9 @@
 **요구 사항:** Node.js 18+, pnpm (`npm install -g pnpm`), Chrome / Edge (MV3)
 
 ```bash
-git clone <repository-url>
-cd AI_Memory
+# 이 저장소를 본인의 GitHub 계정으로 포크하세요
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
+cd personal-ai-memory
 pnpm install
 
 # 개발 모드 — 저장 시 자동 리빌드

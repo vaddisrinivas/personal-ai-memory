@@ -14,7 +14,7 @@
 
 ---
 
-> 一个 Chrome 扩展，能在后台**静默捕获**你在 ChatGPT、Claude、Gemini 的对话，并以语义向量的方式存储在本地端。通过一键 **Recall** 按钮，将最相关的过去记忆注入新的对话中，让 AI 了解你的历史背景。
+> 一个 Chrome 扩展，能在后台**静默捕获**你在 ChatGPT、Claude、Gemini、Perplexity 的对话，并以语义向量的方式存储在本地端。通过一键 **Recall** 按钮，将最相关的过去记忆注入新的对话中，让 AI 了解你的历史背景。
 >
 > **100% 本地端。无云端。无服务器。无需账号。**
 
@@ -41,8 +41,9 @@
 **要求：** Node.js 18+、pnpm（`npm install -g pnpm`）、Chrome / Edge（MV3）
 
 ```bash
-git clone <repository-url>
-cd AI_Memory
+# 将此仓库 Fork 到你自己的 GitHub 账户
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
+cd personal-ai-memory
 pnpm install
 
 # 开发模式 — 每次保存后自动重建

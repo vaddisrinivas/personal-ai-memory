@@ -14,7 +14,7 @@
 
 ---
 
-> Una extensión de Chrome que **captura silenciosamente** tus conversaciones de ChatGPT / Claude / Gemini y las almacena como memorias semánticas privadas e indexadas localmente — con un botón **Recall** de un clic para inyectar contexto relevante en nuevos chats.
+> Una extensión de Chrome que **captura silenciosamente** tus conversaciones de ChatGPT / Claude / Gemini / Perplexity y las almacena como memorias semánticas privadas e indexadas localmente — con un botón **Recall** de un clic para inyectar contexto relevante en nuevos chats.
 >
 > **100% local. Sin nube. Sin servidor. Sin cuenta requerida.**
 
@@ -42,8 +42,9 @@ Instala directamente desde la [Chrome Web Store](https://chrome.google.com/webst
 **Requisitos:** Node.js 18+, pnpm (`npm install -g pnpm`), Chrome / Edge (MV3)
 
 ```bash
-git clone <repository-url>
-cd AI_Memory
+# Haz un fork de este repositorio en tu propia cuenta de GitHub
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
+cd personal-ai-memory
 pnpm install
 
 # Modo desarrollo — recompila automáticamente al guardar

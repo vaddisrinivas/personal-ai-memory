@@ -14,7 +14,7 @@
 
 ---
 
-> Eine Chrome-Erweiterung, die deine ChatGPT / Claude / Gemini-Gespräche **still im Hintergrund erfasst** und als private, lokal indexierte semantische Erinnerungen speichert — mit einem **Recall**-Button, der relevante Kontexte per Klick in neue Chats injiziert.
+> Eine Chrome-Erweiterung, die deine ChatGPT / Claude / Perplexity / Gemini-Gespräche **still im Hintergrund erfasst** und als private, lokal indexierte semantische Erinnerungen speichert — mit einem **Recall**-Button, der relevante Kontexte per Klick in neue Chats injiziert.
 >
 > **100% lokal. Keine Cloud. Kein Server. Kein Account erforderlich.**
 
@@ -42,7 +42,8 @@ Direkt im [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddk
 **Voraussetzungen:** Node.js 18+, pnpm (`npm install -g pnpm`), Chrome / Edge (MV3)
 
 ```bash
-git clone <repository-url>
+# Forke dieses Repository in dein eigenes GitHub-Konto
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
 cd AI_Memory
 pnpm install
 

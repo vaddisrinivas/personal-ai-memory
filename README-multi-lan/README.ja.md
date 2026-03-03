@@ -14,7 +14,7 @@
 
 ---
 
-> ChatGPT / Claude / Gemini の会話を**バックグラウンドで自動キャプチャ**し、ブラウザのローカルにセマンティックベクトルとして保存する Chrome 拡張機能 — ワンクリックの **Recall** ボタンで関連する過去の記憶を新しいチャットに注入します。
+> ChatGPT / Claude / Gemini / Perplexity の会話を**バックグラウンドで自動キャプチャ**し、ブラウザのローカルにセマンティックベクトルとして保存する Chrome 拡張機能 — ワンクリックの **Recall** ボタンで関連する過去の記憶を新しいチャットに注入します。
 >
 > **100% ローカル。クラウドなし。サーバーなし。アカウント不要。**
 
@@ -42,8 +42,9 @@
 **要件:** Node.js 18+、pnpm（`npm install -g pnpm`）、Chrome / Edge（MV3）
 
 ```bash
-git clone <repository-url>
-cd AI_Memory
+# このリポジトリを自分の GitHub アカウントにフォークします
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
+cd personal-ai-memory
 pnpm install
 
 # 開発モード — 保存のたびに自動リビルド

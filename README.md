@@ -14,7 +14,7 @@
 
 ---
 
-> A Chrome extension that **silently captures** your ChatGPT / Claude / Gemini conversations and stores them as private, locally-indexed semantic memories — with a one-click **Recall** button to inject relevant context back into new chats.
+> A Chrome extension that **silently captures** your ChatGPT / Claude / Gemini / Perplexity conversations and stores them as private, locally-indexed semantic memories — with a one-click **Recall** button to inject relevant context back into new chats.
 >
 > **100% local. No cloud. No server. No account required.**
 
@@ -47,7 +47,8 @@ Install directly from the [Chrome Web Store](https://chrome.google.com/webstore/
 **Requirements:** Node.js 18+, pnpm (`npm install -g pnpm`), Chrome / Edge (MV3)
 
 ```bash
-git clone <repository-url>
+# Fork this repository to your own GitHub account
+git clone https://github.com/<your-github-username>/personal-ai-memory.git
 cd personal-ai-memory
 pnpm install
 
@@ -87,7 +88,7 @@ pnpm build
 ## How It Works
 
 ```
-You chat on ChatGPT / Claude / Gemini
+You chat on ChatGPT / Claude / Gemini / Perplexity
         │  (extension captures silently in background)
         ▼
 Memories stored locally in IndexedDB
