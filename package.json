@@ -46,13 +46,19 @@
   },
   "manifest": {
     "host_permissions": [
-      "<all_urls>"
+      "https://chat.openai.com/*",
+      "https://chatgpt.com/*",
+      "https://claude.ai/*",
+      "https://gemini.google.com/*",
+      "https://www.perplexity.ai/*",
+      "https://grok.com/*"
     ],
     "permissions": [
       "unlimitedStorage",
       "tabs",
       "scripting",
-      "offscreen"
+      "offscreen",
+      "activeTab"
     ],
     "content_security_policy": {
       "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
@@ -63,7 +69,8 @@
     "web_accessible_resources": [
       {
         "resources": [
-          "assets/icon.png"
+          "assets/icon.png",
+          "memory-float-ui*.js"
         ],
         "matches": [
           "<all_urls>"

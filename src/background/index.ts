@@ -1040,9 +1040,36 @@ const AI_ORIGINS_FOR_PANEL = [
 
 chrome.action.onClicked.addListener((tab) => {
   if (!tab.id) return;
-  chrome.tabs.sendMessage(tab.id, { type: "OPEN_MEMORY_PANEL" }).catch(() => {
-    // Content script may not be loaded yet (e.g. tab just opened)
-  });
+  const tabId = tab.id;
+  const tabUrl = tab.url ?? "";
+
+  const isAISite = AI_ORIGINS.some((o) => tabUrl.startsWith(o));
+
+  if (isAISite) {
+    // AI site: content script already injected, just open the panel
+    chrome.tabs.sendMessage(tabId, { type: "OPEN_MEMORY_PANEL" }).catch(() => void 0);
+  } else {
+    // Non-AI site: find the hashed memory-float-ui filename from manifest, inject it
+    const manifest = chrome.runtime.getManifest();
+    const floatScript = (manifest.content_scripts ?? [])
+      .flatMap((cs) => cs.js ?? [])
+      .find((f) => f.includes("memory-float-ui"));
+
+    if (!floatScript) return;
+
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        files: [floatScript],
+      })
+      .then(() => {
+        // Small delay to allow React to mount before opening panel
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabId, { type: "OPEN_MEMORY_PANEL" }).catch(() => void 0);
+        }, 300);
+      })
+      .catch(() => void 0);
+  }
 });
 
 // Rebuild MiniSearch keyword index from Dexie on every Service Worker startup.
