@@ -309,9 +309,162 @@ function tryInjectButton(): void {
   point.container.insertBefore(btn, point.before)
 }
 
+// ─── DOM Conversation Scraper ─────────────────────────────────────────────────
+// Captures historical messages already rendered in the DOM (i.e. when a user
+// opens an existing Gemini conversation). Sends them via window.postMessage in
+// the same format as the network interceptor so the isolated content script
+// (interceptor.ts) can forward them to the background.
+//
+// Gemini DOM structure (as of 2026):
+//
+//   User turn:
+//     <span class="user-query-bubble-with-background ...">
+//       <p class="query-text-line ng-star-inserted">…</p>
+//       <p class="query-text-line ng-star-inserted">…</p>  ← multiple chunks
+//     </span>
+//
+//   Assistant turn:
+//     <div id="message-content-id-r_<id>" class="...">
+//       <div class="markdown markdown-main-panel ...">…</div>
+//     </div>
+//
+// The conversation is interleaved in document order: user, assistant, user, ...
+
+const POST_TYPE = '__ai_memory_capture__'
+const DOM_SYNC_URL = 'https://gemini.google.com/dom-sync'
+
+/** Extract the Gemini conversation ID from the current URL.
+ *  URL pattern: https://gemini.google.com/app/<conversationId>
+ */
+function extractGeminiConversationId(): string | null {
+  const m = window.location.pathname.match(/\/app\/([^/?#]+)/)
+  return m ? m[1] : null
+}
+
+/** Collect text from a user turn bubble (joins multiple query-text-line chunks). */
+function extractUserText(bubble: Element): string {
+  const lines = bubble.querySelectorAll<HTMLElement>('p.query-text-line')
+  if (lines.length > 0) {
+    return Array.from(lines).map((p) => p.innerText?.trim() ?? '').filter(Boolean).join('\n')
+  }
+  return (bubble as HTMLElement).innerText?.trim() ?? ''
+}
+
+/** Collect text from an assistant response container. */
+function extractAssistantText(container: Element): string {
+  // Prefer the markdown panel's rendered text
+  const md = container.querySelector<HTMLElement>('.markdown.markdown-main-panel')
+  if (md) return md.innerText?.trim() ?? ''
+  return (container as HTMLElement).innerText?.trim() ?? ''
+}
+
+interface ScrapedTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/** Walk the DOM in document order and collect all conversation turns.
+ *  querySelectorAll with a comma-separated selector guarantees DOM order. */
+function scrapeConversationTurns(): ScrapedTurn[] {
+  const turns: ScrapedTurn[] = []
+
+  // Single query preserves DOM document order — no sorting needed.
+  const els = document.querySelectorAll<Element>(
+    'span.user-query-bubble-with-background, [id^="message-content-id-r_"]'
+  )
+
+  for (const el of els) {
+    if (el.matches('span.user-query-bubble-with-background')) {
+      const content = extractUserText(el)
+      if (content) turns.push({ role: 'user', content })
+    } else {
+      const content = extractAssistantText(el)
+      if (content) turns.push({ role: 'assistant', content })
+    }
+  }
+
+  return turns
+}
+
+const _scannedConversations = new Set<string>()
+
+function sendCapturedTurn(role: 'user' | 'assistant', content: string, conversationId: string): void {
+  window.postMessage(
+    {
+      type: POST_TYPE,
+      payload: {
+        provider: 'google',
+        rawData: { role, content, conversationId, isPartial: false, metadata: { fromHistory: true } },
+        url: DOM_SYNC_URL,
+        timestamp: Date.now(),
+      },
+    },
+    window.location.origin
+  )
+}
+
+function runDomSync(conversationId: string): void {
+  if (_scannedConversations.has(conversationId)) return
+  _scannedConversations.add(conversationId)
+
+  const turns = scrapeConversationTurns()
+  for (const turn of turns) {
+    sendCapturedTurn(turn.role, turn.content, conversationId)
+  }
+}
+
+/**
+ * Wait until the conversation DOM has fully settled, then scrape.
+ *
+ * Gemini renders messages newest-first, then fills in older ones.
+ * We use an idle-debounce approach: every time new nodes appear we
+ * reset a short timer. Only when the DOM has been quiet for SETTLE_MS
+ * do we consider the full conversation loaded and run the scan.
+ * A hard 15s ceiling prevents the observer from leaking forever.
+ */
+function waitForDomAndSync(conversationId: string): void {
+  const SETTLE_MS = 600
+  const MAX_WAIT_MS = 15_000
+
+  let settleTimer: ReturnType<typeof setTimeout> | null = null
+
+  const hardTimeout = setTimeout(() => {
+    syncObserver.disconnect()
+    if (settleTimer) clearTimeout(settleTimer)
+    runDomSync(conversationId)
+  }, MAX_WAIT_MS)
+
+  function onSettle(): void {
+    syncObserver.disconnect()
+    clearTimeout(hardTimeout)
+    runDomSync(conversationId)
+  }
+
+  function resetSettle(): void {
+    if (settleTimer) clearTimeout(settleTimer)
+    settleTimer = setTimeout(onSettle, SETTLE_MS)
+  }
+
+  const syncObserver = new MutationObserver(resetSettle)
+  syncObserver.observe(document.body, { childList: true, subtree: true })
+
+  // If bubbles are already present, start the settle timer immediately
+  if (document.querySelector('span.user-query-bubble-with-background')) {
+    resetSettle()
+  }
+}
+
+function maybeSyncConversation(): void {
+  const conversationId = extractGeminiConversationId()
+  if (!conversationId) return
+  if (_scannedConversations.has(conversationId)) return
+  waitForDomAndSync(conversationId)
+}
+
 // ─── SPA Navigation Observer ──────────────────────────────────────────────────
 
 let rafPending = false
+let _lastObservedUrl = window.location.href
 
 function scheduleInjection(): void {
   if (rafPending) return
@@ -319,6 +472,13 @@ function scheduleInjection(): void {
   requestAnimationFrame(() => {
     rafPending = false
     tryInjectButton()
+
+    // Detect SPA navigation and trigger DOM sync for the new conversation
+    const currentUrl = window.location.href
+    if (currentUrl !== _lastObservedUrl) {
+      _lastObservedUrl = currentUrl
+      maybeSyncConversation()
+    }
   })
 }
 
@@ -327,6 +487,9 @@ const observer = new MutationObserver(scheduleInjection)
 function start(): void {
   tryInjectButton()
   observer.observe(document.body, { childList: true, subtree: true })
+
+  // Sync on initial page load
+  maybeSyncConversation()
 }
 
 if (document.readyState === 'loading') {

@@ -20,6 +20,7 @@ export class GeminiAdapter implements IAdapter {
   private static readonly HANDLED_PATTERNS = [
     'generativelanguage.googleapis.com',
     'gemini.google.com/_/BardChatUi',
+    'gemini.google.com/dom-sync',
   ]
 
   canHandle(url: string): boolean {
@@ -109,6 +110,7 @@ export class GeminiAdapter implements IAdapter {
     const conversationId =
       typeof raw === 'string' && raw.trim() ? raw.trim() : 'unknown'
     const isPartial = Boolean(data['isPartial'])
+    const metadata = data['metadata'] as Record<string, unknown> | undefined
 
     const record: MemoryRecord = {
       id: generateRecordId(),
@@ -121,6 +123,7 @@ export class GeminiAdapter implements IAdapter {
       isPartial,
       isDeleted: false,
       isSuperseded: false,
+      ...(metadata && { metadata }),
     }
 
     return [record]

@@ -19,6 +19,7 @@ export const config: PlasmoCSConfig = {
     'https://claude.ai/chat/*',
     'https://gemini.google.com/*',
     'https://www.perplexity.ai/*',
+    'https://grok.com/*',
   ],
 }
 
@@ -51,6 +52,13 @@ const SESSION_ID_EXTRACTORS: Record<string, (data: Record<string, unknown>) => s
       const first = data['entries'][0] as Record<string, unknown>
       if (typeof first['context_uuid'] === 'string') return first['context_uuid'] as string
     }
+    return undefined
+  },
+  xai: (data) => {
+    // Assembled streaming message: has conversationId
+    if (typeof data['conversationId'] === 'string') return data['conversationId'] as string
+    // History load-responses: injector injects _conversationId
+    if (typeof data['_conversationId'] === 'string') return data['_conversationId'] as string
     return undefined
   },
 }
@@ -214,6 +222,33 @@ window.addEventListener('message', (e: MessageEvent) => {
       return
     }
 
+    // Handle Grok title_update: route directly to UPDATE_CONVERSATION_TITLE
+    if (
+      p.provider === 'xai' &&
+      p.rawData &&
+      typeof p.rawData === 'object' &&
+      (p.rawData as Record<string, unknown>)['type'] === 'title_update'
+    ) {
+      const rawData = p.rawData as Record<string, unknown>
+      const conversationId = rawData['conversationId'] as string | undefined
+      const title = rawData['title'] as string | undefined
+      if (conversationId && title) {
+        const sessionId = `xai:${conversationId}`
+        lastSessionId = sessionId
+        chrome.runtime.sendMessage(
+          { type: 'UPDATE_CONVERSATION_TITLE', payload: { sessionId, title } },
+          () => {
+            try {
+              void chrome.runtime.lastError
+            } catch {
+              // Extension context invalidated; ignore
+            }
+          }
+        )
+      }
+      return
+    }
+
     // Handle Perplexity title_update: route directly to UPDATE_CONVERSATION_TITLE
     if (
       p.provider === 'perplexity' &&
@@ -266,12 +301,20 @@ window.addEventListener('message', (e: MessageEvent) => {
         p.rawData &&
         typeof p.rawData === 'object' &&
         Array.isArray((p.rawData as Record<string, unknown>)['chat_messages'])
+      const isGrokHistory =
+        p.provider === 'xai' &&
+        p.rawData &&
+        typeof p.rawData === 'object' &&
+        Array.isArray((p.rawData as Record<string, unknown>)['responses'])
       const isPerplexityThreadHistory =
         p.provider === 'perplexity' &&
         p.rawData &&
         typeof p.rawData === 'object' &&
         Array.isArray((p.rawData as Record<string, unknown>)['entries'])
-      if (isPerplexityThreadHistory) {
+      if (isGrokHistory) {
+        // Grok history has no inline title — fall back to document.title
+        updateConversationTitle(sessionId)
+      } else if (isPerplexityThreadHistory) {
         // Use thread_title from the first entry for clean title (API title without browser suffix)
         const entries = (p.rawData as Record<string, unknown>)['entries'] as Array<Record<string, unknown>>
         const threadTitle = entries[0]?.['thread_title'] as string | undefined

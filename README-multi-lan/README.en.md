@@ -5,7 +5,13 @@
 **Your conversations, remembered. Privately.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/cjkjgbddkaoogdbfffiooeppnmbplpnh?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/)
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-supported-74aa9c?logo=openai&logoColor=white)](https://chatgpt.com)
+[![Claude](https://img.shields.io/badge/Claude-supported-d97757?logo=anthropic&logoColor=white)](https://claude.ai)
+[![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4?logo=google&logoColor=white)](https://gemini.google.com)
+[![Perplexity](https://img.shields.io/badge/Perplexity-supported-20808D?logo=perplexity&logoColor=white)](https://perplexity.ai)
+[![Grok](https://img.shields.io/badge/Grok-supported-000000?logo=x&logoColor=white)](https://grok.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 🌐 [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Back to index](README.md)
@@ -13,12 +19,13 @@
 
 
 <a href="https://www.producthunt.com/products/personal-ai-memory?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-personal-ai-memory" target="_blank" rel="noopener noreferrer"><img alt="Personal AI Memory - Captures and stores your chat from various AI platforms | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1089387&amp;theme=light&amp;t=1772644496610"></a>
+🌐 [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Back to index](../README.md)
 
 </div>
 
 ---
 
-> A Chrome extension that **silently captures** your ChatGPT / Claude / Gemini / Perplexity conversations and stores them as private, locally-indexed semantic memories — with a one-click **Recall** button to inject relevant context back into new chats.
+> A Chrome extension that **silently captures** your ChatGPT / Claude / Gemini / Perplexity / Grok conversations and stores them as private, locally-indexed semantic memories — with a one-click **Recall** button to inject relevant context back into new chats.
 >
 > **100% local. No cloud. No server. No account required.**
 
@@ -29,7 +36,7 @@
 
 ### For Users — Chrome Web Store
 
-Install directly from the [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh).
+Install directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh).
 
 > **Note:** The Chrome Web Store version may lag behind the latest release. For the newest features, download the latest `.zip` from the [Releases](../../releases) page and load it manually (see below).
 
@@ -71,7 +78,7 @@ pnpm build
 
 | Feature | Details |
 |---------|---------|
-| **Passive capture** | Auto-intercepts ChatGPT / Claude / Gemini — no setup, no clicks |
+| **Passive capture** | Auto-intercepts ChatGPT / Claude / Gemini / Perplexity / Grok — no setup, no clicks. Just visit the page and existing conversations are captured automatically. |
 | **Hybrid search** | Vector (time-decay) + BM25, fused with RRF for best-of-both results |
 | **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT and Claude |
 | **Local backup** | Export / import full backup as JSON (embeddings included) |
@@ -80,43 +87,60 @@ pnpm build
 | **8 UI languages** | zh-TW · zh-CN · en · ja · ko · es · fr · de — auto-detected |
 | **Dark / Light theme** | Apple Liquid Glass-inspired toggle |
 
-**Supported platforms:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`)
+**Supported platforms:** ChatGPT (`chat.openai.com` / `chatgpt.com`) · Gemini (`gemini.google.com`) · Claude (`claude.ai`) · Perplexity (`perplexity.ai`) · Grok (`grok.com`)
 
 ---
 
-# How to Export ChatGPT/Gemini Chat History?
+## How to Export Chat History?
 
-## ChatGPT Chat History Export Steps
+### ChatGPT
 
 1. Log in to your ChatGPT account and go to the main screen.
-2. Click your "Profile Picture" or "Name" in the corner to open the menu.
-3. Select "Settings".
-4. Go to the "Data controls" tab.
-5. Find the "Export data" option and click "Export".
-6. A confirmation window will pop up; click "Confirm export".
-7. You will receive an email containing a download link at your registered email address (Note: It may take up to 24 hours to receive the export email after requesting).
-8. Click the link in the email to download the ZIP file. After extracting, the file containing your chat history will be `conversations-00x.json`.
+2. Click your profile picture or name in the corner to open the menu.
+3. Select **Settings**.
+4. Go to the **Data controls** tab.
+5. Find **Export data** and click **Export**.
+6. Click **Confirm export** in the confirmation window.
+7. You will receive an email with a download link (may take up to 24 hours).
+8. Download the ZIP file. After extracting, the chat history file is `conversations-00x.json`.
 
+### Gemini
 
-## Gemini Chat History Export Steps
+Export via Google Takeout:
 
-Exporting full data for Gemini is integrated through the Google Takeout service.
+1. Go to [Google Takeout](https://takeout.google.com) and sign in.
+2. Click **Deselect all** at the top.
+3. Scroll down and check **My Activity** (NOT ~~Gemini Apps~~).
+4. Click **Multiple formats** below that section.
+5. Change the first activity format from **HTML** to **JSON**, click OK.
+6. Click **Next step** → choose delivery method → **Create export**.
+7. Wait for the email. After extracting, the file is `my activity.json`.
 
-1. Log in to your Google account and navigate to the [Google Takeout](https://takeout.google.com) website.
-2. Click "Deselect all" at the top of the page to clear all default Google services.
-3. Scroll down the list, find and check "My Activity" (Note: Do not select ~~Gemini Apps~~).
-4. Click the "Multiple formats" button below that section.
-5. In the settings window that appears, change the format of the first activity record from "HTML" to "JSON", and click OK.
-6. Scroll to the very bottom of the page and click "Next step".
-7. Choose your delivery method (e.g., Send download link via email), keep the default file type and maximum size, then click "Create export".
-8. Wait for the system to finish processing and you will receive an email with the download link. After extracting the downloaded file, the exported record file will be `my activity.json`.
+### Claude
+
+1. Go to [https://claude.ai/settings/data-privacy-controls](https://claude.ai/settings/data-privacy-controls).
+2. Click **Export data**.
+3. Wait for the email with the download link.
+4. After extracting, the chat history file is `conversations.json`.
+
+### Perplexity
+
+> Perplexity does **not** support user data export. Each conversation must be visited individually to be captured by the extension.
+
+### Grok
+
+1. Go to [https://grok.com](https://grok.com).
+2. Click your profile picture (bottom-left) → **Settings** → **Data controls**.
+3. Click **Export Account Data**.
+4. Wait several hours for the download link email.
+5. After extracting, the file is `prod-grok-backend.json`.
 
 ---
 
 ## How It Works
 
 ```
-You chat on ChatGPT / Claude / Gemini
+You chat on ChatGPT / Claude / Gemini / Perplexity / Grok
         │  (extension captures silently in background)
         ▼
 Memories stored locally in IndexedDB
@@ -218,11 +242,15 @@ src/
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 parser
 │       ├── claude.ts          Claude SSE parser
-│       └── gemini.ts          Gemini XHR StreamGenerate parser
+│       ├── gemini.ts          Gemini XHR StreamGenerate parser + passive capture
+│       ├── perplexity.ts      Perplexity SSE parser
+│       └── grok.ts            Grok SSE parser
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world bridge + <title> MutationObserver
 │   ├── memory-float-ui.tsx    Floating panel content script entry point
-│   └── chatgpt-injector.tsx   Recall button injection + RAG prompt assembly
+│   ├── chatgpt-injector.tsx   Recall button injection + RAG prompt assembly
+│   ├── gemini-injector.tsx    Gemini passive capture + Recall button
+│   └── grok-injector.tsx      Grok passive capture
 ├── tabs/
 │   └── offscreen.tsx          ONNX inference (Offscreen Document — needs DOM)
 ├── popup/
@@ -270,11 +298,15 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 
 ## Changelog
 
+### v0.0.4 — 2026-03-06
+- **New:** Grok (`grok.com`) support — conversations are silently captured while you browse.
+- **New:** Gemini passive message capture — existing conversations on the page are automatically captured when you visit.
+
 ### v0.0.3 — 2026-03-02
-- **New:** Perplexity (`perplexity.ai`) support — conversations are silently captured while you browse. Note: Perplexity does not support user data export, so each conversation must be visited individually to be collected.
+- Perplexity (`perplexity.ai`) support — conversations are silently captured while you browse. Note: Perplexity does not support user data export, so each conversation must be visited individually to be collected.
 
 ### v0.0.2 — 2026-03-01
-- **New:** Full Claude web support (`claude.ai`) — conversation capture, Recall button injection, and floating memory panel now work on Claude
+- Full Claude web support (`claude.ai`) — conversation capture, Recall button injection, and floating memory panel now work on Claude
 
 ### v0.0.1 — Initial Release
 - ChatGPT and Gemini conversation capture

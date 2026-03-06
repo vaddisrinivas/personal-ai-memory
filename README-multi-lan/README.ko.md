@@ -5,10 +5,16 @@
 **당신의 대화, 비공개로 기억됩니다.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/cjkjgbddkaoogdbfffiooeppnmbplpnh?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/)
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-supported-74aa9c?logo=openai&logoColor=white)](https://chatgpt.com)
+[![Claude](https://img.shields.io/badge/Claude-supported-d97757?logo=anthropic&logoColor=white)](https://claude.ai)
+[![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4?logo=google&logoColor=white)](https://gemini.google.com)
+[![Perplexity](https://img.shields.io/badge/Perplexity-supported-20808D?logo=perplexity&logoColor=white)](https://perplexity.ai)
+[![Grok](https://img.shields.io/badge/Grok-supported-000000?logo=x&logoColor=white)](https://grok.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-🌐 [English](README.en.md) | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [홈으로](README.md)
+🌐 [English](README.en.md) | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [홈으로](../README.md)
 
 
 <a href="https://www.producthunt.com/products/personal-ai-memory?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-personal-ai-memory" target="_blank" rel="noopener noreferrer"><img alt="Personal AI Memory - Captures and stores your chat from various AI platforms | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1089387&amp;theme=light&amp;t=1772644496610"></a>
@@ -16,7 +22,7 @@
 
 ---
 
-> ChatGPT / Claude / Gemini / Perplexity 대화를 **자동으로 캡처**하여 브라우저 로컬에 시맨틱 벡터로 저장하는 Chrome 확장 프로그램 — 원클릭 **Recall** 버튼으로 관련 과거 기억을 새 대화에 주입합니다.
+> ChatGPT / Claude / Gemini / Perplexity / Grok 대화를 **자동으로 캡처**하여 브라우저 로컬에 시맨틱 벡터로 저장하는 Chrome 확장 프로그램 — 원클릭 **Recall** 버튼으로 관련 과거 기억을 새 대화에 주입합니다.
 >
 > **100% 로컬. 클라우드 없음. 서버 없음. 계정 불필요.**
 
@@ -26,7 +32,7 @@
 
 ### 일반 사용자 — Chrome Web Store
 
-[Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh)에서 바로 설치할 수 있습니다.
+[Chrome Web Store](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)에서 바로 설치할 수 있습니다.
 
 > **참고:** Chrome Web Store 버전은 최신 릴리스보다 업데이트가 느릴 수 있습니다. 최신 기능을 사용하려면 [Releases](../../releases) 페이지에서 최신 `.zip`을 다운로드하여 수동으로 로드하세요 (아래 참조).
 
@@ -68,7 +74,7 @@ pnpm build
 
 | 기능 | 설명 |
 |------|------|
-| **수동 캡처** | ChatGPT / Claude / Gemini 대화를 자동으로 가로채 수동 조작 없이 저장 |
+| **수동 캡처** | ChatGPT / Claude / Gemini / Perplexity / Grok 대화를 자동으로 가로채 저장. 페이지를 방문하기만 해도 이미 있는 대화가 자동으로 캡처됩니다. |
 | **하이브리드 검색** | 시맨틱 벡터 검색(시간 감쇠) × BM25 키워드 검색, RRF 융합 |
 | **원클릭 리콜** | ChatGPT / Claude 입력창 옆 Recall 버튼 클릭으로 관련 기억을 RAG 프롬프트로 주입 |
 | **로컬 백업** | 전체 백업을 JSON으로 내보내기 / 가져오기(임베딩 벡터 포함) |
@@ -77,41 +83,60 @@ pnpm build
 | **8개 UI 언어** | zh-TW · zh-CN · en · ja · ko · es · fr · de — 자동 감지 |
 | **다크 / 라이트 테마** | Apple Liquid Glass 스타일 전환 |
 
-**지원 플랫폼:** ChatGPT(`chat.openai.com` / `chatgpt.com`) · Gemini(`gemini.google.com`) · Claude(`claude.ai`)
+**지원 플랫폼:** ChatGPT(`chat.openai.com` / `chatgpt.com`) · Gemini(`gemini.google.com`) · Claude(`claude.ai`) · Perplexity(`perplexity.ai`) · Grok(`grok.com`)
+
 ---
 
-# ChatGPT/Gemini 채팅 기록을 내보내는 방법
+## 채팅 기록 내보내기 방법
 
-## ChatGPT 채팅 기록 내보내기 단계
+### ChatGPT
 
 1. ChatGPT 계정에 로그인하고 메인 화면으로 이동합니다.
 2. 화면 모서리에 있는 '프로필 사진' 또는 '이름'을 클릭하여 메뉴를 엽니다.
 3. 'Settings'(설정)를 선택합니다.
 4. 'Data controls'(데이터 제어) 탭으로 이동합니다.
-5. 'Export data'(데이터 내보내기) 옵션을 찾아 'Export'(내보내기)를 클릭합니다.
-6. 확인 창이 나타나면 'Confirm export'(내보내기 확인)를 클릭합니다.
-7. 등록된 이메일 주소로 다운로드 링크가 포함된 이메일이 전송됩니다. (참고: 요청 후 내보내기 이메일을 받기까지 최대 24시간이 걸릴 수 있습니다.)
-8. 이메일의 링크를 클릭하여 ZIP 파일을 다운로드합니다. 압축을 풀면 대화 기록이 포함된 파일은 `conversations-00x.json`입니다.
+5. 'Export data'를 찾아 'Export'를 클릭합니다.
+6. 확인 창이 나타나면 'Confirm export'를 클릭합니다.
+7. 등록된 이메일 주소로 다운로드 링크가 포함된 이메일이 전송됩니다 (최대 24시간 소요될 수 있습니다).
+8. ZIP 파일을 다운로드하여 압축을 풀면 대화 기록 파일은 `conversations-00x.json`입니다.
 
+### Gemini
 
-## Gemini 채팅 기록 내보내기 단계
-
-Gemini의 전체 데이터 내보내기는 Google Takeout(Google 데이터 다운로드) 서비스를 통해 통합됩니다.
+Google Takeout을 통해 내보내기:
 
 1. Google 계정에 로그인하고 [Google Takeout](https://takeout.google.com) 웹사이트로 이동합니다.
-2. 페이지 상단의 '모두 선택 해제'를 클릭하여 기본 Google 서비스를 모두 지웁니다.
-3. 목록을 아래로 스크롤하여 '내 활동'(My Activity)을 찾아 선택합니다. (참고: ~~Gemini Apps~~는 선택하지 않습니다.)
-4. 해당 섹션 아래의 '여러 형식' 버튼을 클릭합니다.
-5. 나타나는 설정 창에서 첫 번째 활동 기록의 형식을 'HTML'에서 'JSON'으로 변경하고 확인을 클릭합니다.
-6. 페이지 맨 아래로 스크롤하여 '다음 단계'를 클릭합니다.
-7. 전송 방법(예: 이메일을 통해 다운로드 링크 전송)을 선택하고, 기본 파일 형식과 최대 크기를 유지한 후 '내보내기 생성'을 클릭합니다.
-8. 시스템 처리가 완료되고 다운로드 링크 이메일이 올 때까지 기다립니다. 다운로드 후 압축을 풀면 내보낸 기록 파일은 `my activity.json`이 됩니다.
+2. '모두 선택 해제'를 클릭합니다.
+3. 목록을 아래로 스크롤하여 '내 활동'(My Activity)을 찾아 선택합니다 (~~Gemini Apps~~는 선택하지 않습니다).
+4. '여러 형식' 버튼을 클릭합니다.
+5. 첫 번째 활동 기록의 형식을 'HTML'에서 'JSON'으로 변경하고 확인을 클릭합니다.
+6. '다음 단계' → 전송 방법 선택 → '내보내기 생성'을 클릭합니다.
+7. 이메일을 기다립니다. 압축을 풀면 내보낸 기록 파일은 `my activity.json`입니다.
+
+### Claude
+
+1. [https://claude.ai/settings/data-privacy-controls](https://claude.ai/settings/data-privacy-controls)로 이동합니다.
+2. 'Export data'를 클릭합니다.
+3. 다운로드 링크 이메일을 기다립니다.
+4. 압축을 풀면 대화 기록 파일은 `conversations.json`입니다.
+
+### Perplexity
+
+> Perplexity는 사용자 데이터 내보내기를 **지원하지 않습니다**. 각 대화를 직접 열어야 확장 프로그램이 캡처할 수 있습니다.
+
+### Grok
+
+1. [https://grok.com](https://grok.com)으로 이동합니다.
+2. 좌측 하단 프로필 사진 클릭 → **Settings** → **Data controls**.
+3. 'Export Account Data'를 클릭합니다.
+4. 수 시간 후 다운로드 링크 이메일이 도착합니다.
+5. 압축을 풀면 파일은 `prod-grok-backend.json`입니다.
+
 ---
 
 ## 작동 원리
 
 ```
-ChatGPT / Claude / Gemini에서 대화
+ChatGPT / Claude / Gemini / Perplexity / Grok에서 대화
         │  (확장 프로그램이 백그라운드에서 자동 캡처)
         ▼
 로컬 IndexedDB에 기억 저장
@@ -197,11 +222,15 @@ src/
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 파서
 │       ├── claude.ts          Claude SSE 파서
-│       └── gemini.ts          Gemini XHR StreamGenerate 파서
+│       ├── gemini.ts          Gemini XHR StreamGenerate 파서 + 패시브 캡처
+│       ├── perplexity.ts      Perplexity SSE 파서
+│       └── grok.ts            Grok SSE 파서
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world 브릿지 + <title> MutationObserver
 │   ├── memory-float-ui.tsx    플로팅 패널 content script 진입점
-│   └── chatgpt-injector.tsx   Recall 버튼 주입 + RAG 프롬프트 조립
+│   ├── chatgpt-injector.tsx   Recall 버튼 주입 + RAG 프롬프트 조립
+│   ├── gemini-injector.tsx    Gemini 패시브 캡처 + Recall 버튼
+│   └── grok-injector.tsx      Grok 패시브 캡처
 ├── tabs/
 │   └── offscreen.tsx          ONNX 추론 (Offscreen Document)
 ├── popup/
@@ -248,11 +277,15 @@ pnpm test:e2e          # E2E 테스트 (Playwright — 빌드 필요)
 
 ## 업데이트 내역
 
+### v0.0.4 — 2026-03-06
+- **신기능:** Grok(`grok.com`) 지원 — 탐색 중 대화를 자동으로 수집합니다.
+- **신기능:** Gemini 패시브 메시지 캡처 — 페이지를 방문하면 기존 대화가 자동으로 캡처됩니다.
+
 ### v0.0.3 — 2026-03-02
-- **신기능:** Perplexity(`perplexity.ai`) 지원 — 탐색 중 대화를 자동으로 수집합니다. 참고: Perplexity는 사용자 데이터 내보내기를 지원하지 않으므로 각 대화를 직접 열어야 수집됩니다.
+- Perplexity(`perplexity.ai`) 지원 — 탐색 중 대화를 자동으로 수집합니다. 참고: Perplexity는 사용자 데이터 내보내기를 지원하지 않으므로 각 대화를 직접 열어야 수집됩니다.
 
 ### v0.0.2 — 2026-03-01
-- **신기능:** Claude 웹(`claude.ai`) 완전 지원 — 대화 캡처, Recall 버튼 주입, 플로팅 메모리 패널이 Claude에서 작동
+- Claude 웹(`claude.ai`) 완전 지원 — 대화 캡처, Recall 버튼 주입, 플로팅 메모리 패널이 Claude에서 작동
 
 ### v0.0.1 — 최초 릴리스
 - ChatGPT · Gemini 대화 캡처

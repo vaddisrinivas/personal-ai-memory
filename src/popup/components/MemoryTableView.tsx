@@ -17,7 +17,7 @@ import {
 } from "../../ui/icons";
 import * as S from "../../ui/styles";
 
-type ProviderFilter = "all" | "openai" | "anthropic" | "google" | "perplexity";
+type ProviderFilter = "all" | "openai" | "anthropic" | "google" | "perplexity" | "xai";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,7 @@ function formatProviderLabel(sessionId: string): string {
   if (provider === "anthropic") return "Claude";
   if (provider === "google") return "Gemini";
   if (provider === "perplexity") return "Perplexity";
+  if (provider === "xai") return "Grok";
   return provider || "Unknown";
 }
 
@@ -161,6 +162,7 @@ const PROVIDER_FILTERS: { key: ProviderFilter; label: string }[] = [
   { key: "anthropic", label: "Claude" },
   { key: "google", label: "Gemini" },
   { key: "perplexity", label: "Perplexity" },
+  { key: "xai", label: "Grok" },
 ];
 
 export function MemoryTableView({

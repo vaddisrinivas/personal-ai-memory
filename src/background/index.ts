@@ -16,6 +16,7 @@ import { ChatGPTAdapter } from './adapters/chatgpt'
 import { ClaudeAdapter } from './adapters/claude'
 import { GeminiAdapter } from './adapters/gemini'
 import { PerplexityAdapter } from './adapters/perplexity'
+import { GrokAdapter } from './adapters/grok'
 import type { IAdapter } from './adapters/base'
 import { db, isCaptureEnabled, isQuotaExceeded, safeAddRecord } from './db'
 import type {
@@ -56,6 +57,7 @@ const adapters: IAdapter[] = [
   new ClaudeAdapter(),
   new GeminiAdapter(),
   new PerplexityAdapter(),
+  new GrokAdapter(),
 ]
 
 function findAdapter(url: string): IAdapter | undefined {
@@ -776,6 +778,7 @@ const AI_ORIGINS = [
   'https://claude.ai',
   'https://gemini.google.com',
   'https://www.perplexity.ai',
+  'https://grok.com',
 ]
 
 function injectMainWorld(tabId: number): void {
@@ -933,6 +936,7 @@ const AI_ORIGINS_FOR_PANEL = [
   'https://claude.ai',
   'https://gemini.google.com',
   'https://www.perplexity.ai',
+  'https://grok.com',
 ]
 
 chrome.action.onClicked.addListener((tab) => {

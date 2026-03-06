@@ -84,6 +84,7 @@ export function mainWorldInterceptor(): void {
           return "anthropic";
         if (host === "www.perplexity.ai" || host === "perplexity.ai")
           return "perplexity";
+        if (host === "grok.com" || host.endsWith(".grok.com")) return "xai";
       } catch (_) {
         if (url.includes("gemini.google.com")) return "google";
         if (
@@ -95,6 +96,7 @@ export function mainWorldInterceptor(): void {
         if (url.includes("anthropic.com") || url.includes("claude.ai/api"))
           return "anthropic";
         if (url.includes("perplexity.ai/rest/")) return "perplexity";
+        if (url.includes("grok.com/rest/")) return "xai";
       }
       return null;
     }
@@ -110,6 +112,9 @@ export function mainWorldInterceptor(): void {
         "perplexity.ai/rest/sse/perplexity_ask",
         "perplexity.ai/rest/thread/",
         "perplexity.ai/rest/thread/set_thread_title",
+        "grok.com/rest/app-chat/conversations/new",
+        "grok.com/rest/app-chat/conversations/",
+        "grok.com/rest/app-chat/conversations_v2/",
       ];
       return patterns.some((p) => url.includes(p));
     }
@@ -477,6 +482,180 @@ export function mainWorldInterceptor(): void {
           : undefined;
 
       return { text: text.trim(), conversationId: id, messageId: mid, model };
+    }
+
+    // ─── Grok URL helpers ────────────────────────────────────────────────────────
+
+    /** Returns true for Grok new-conversation streaming endpoint. */
+    function isGrokNewConversationUrl(url: string): boolean {
+      return url.includes("grok.com/rest/app-chat/conversations/new");
+    }
+
+    /** Returns true for Grok existing-conversation streaming endpoint. */
+    function isGrokResponsesUrl(url: string): boolean {
+      return (
+        /grok\.com\/rest\/app-chat\/conversations\/[^/]+\/responses$/.test(url)
+      );
+    }
+
+    /** Returns true for Grok load-responses (history) endpoint. */
+    function isGrokLoadResponsesUrl(url: string): boolean {
+      return url.includes("grok.com/rest/app-chat/conversations/") &&
+        url.endsWith("/load-responses");
+    }
+
+    /** Returns true for Grok single-conversation metadata endpoint. */
+    function isGrokConversationsV2Url(url: string): boolean {
+      return url.includes("grok.com/rest/app-chat/conversations_v2/");
+    }
+
+    /**
+     * Extract conversation UUID from a Grok URL path.
+     * Works for /conversations/<id>/responses and /conversations/<id>/load-responses.
+     */
+    function extractGrokConversationIdFromUrl(url: string): string | null {
+      const m = url.match(/\/conversations\/([^/?]+)\//);
+      return m ? m[1] : null;
+    }
+
+    /**
+     * Split a body text containing multiple concatenated JSON objects into an array.
+     * Grok streams responses as plain JSON objects placed one after another:
+     *   {"result":{...}}{"result":{...}}{"result":{...}}
+     * A simple brace-depth counter correctly splits them regardless of whitespace.
+     */
+    function splitGrokObjects(text: string): Record<string, unknown>[] {
+      const objects: Record<string, unknown>[] = [];
+      let depth = 0;
+      let start = 0;
+      let inString = false;
+      let escapeNext = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (escapeNext) { escapeNext = false; continue; }
+        if (ch === "\\") { escapeNext = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+
+        if (ch === "{") {
+          depth++;
+        } else if (ch === "}") {
+          depth--;
+          if (depth === 0) {
+            const slice = text.slice(start, i + 1).trim();
+            if (slice) {
+              try {
+                objects.push(JSON.parse(slice) as Record<string, unknown>);
+              } catch {
+                // ignore malformed slice
+              }
+            }
+            start = i + 1;
+          }
+        }
+      }
+      return objects;
+    }
+
+    /**
+     * Handle Grok streaming response (new or existing conversation).
+     * Parses concatenated JSON objects and dispatches each message individually.
+     */
+    function handleGrokStreamingResponse(
+      responseClone: Response,
+      url: string,
+      timestamp: number,
+      isNew: boolean,
+    ): void {
+      responseClone
+        .text()
+        .then((text: string) => {
+          const objects = splitGrokObjects(text);
+          let conversationId: string | null = isNew
+            ? null
+            : extractGrokConversationIdFromUrl(url);
+
+          for (const obj of objects) {
+            const result = obj["result"] as Record<string, unknown> | undefined;
+            if (!result) continue;
+
+            // New conversation: first object contains conversation metadata
+            if (isNew && result["conversation"]) {
+              const conv = result["conversation"] as Record<string, unknown>;
+              if (typeof conv["conversationId"] === "string") {
+                conversationId = conv["conversationId"] as string;
+              }
+              continue;
+            }
+
+            // New conversation: messages are nested under result.response
+            // Existing conversation: messages are directly under result
+            const responseBlock = (result["response"] as Record<string, unknown> | undefined) ?? result;
+
+            // User message
+            const userResp = responseBlock["userResponse"] as Record<string, unknown> | undefined;
+            if (userResp && typeof userResp["message"] === "string" && conversationId) {
+              const msg = (userResp["message"] as string).trim();
+              if (msg) {
+                sendCapture(
+                  "xai",
+                  {
+                    role: "user",
+                    content: msg,
+                    conversationId,
+                    messageId: userResp["responseId"] as string | undefined,
+                    model: userResp["model"] as string | undefined,
+                    isPartial: false,
+                  },
+                  url,
+                  timestamp,
+                );
+              }
+            }
+
+            // Assistant message
+            const modelResp = responseBlock["modelResponse"] as Record<string, unknown> | undefined;
+            if (modelResp && typeof modelResp["message"] === "string" && conversationId) {
+              const msg = (modelResp["message"] as string).trim();
+              if (msg) {
+                sendCapture(
+                  "xai",
+                  {
+                    role: "assistant",
+                    content: msg,
+                    conversationId,
+                    messageId: modelResp["responseId"] as string | undefined,
+                    parentMessageId: modelResp["parentResponseId"] as string | undefined,
+                    model: modelResp["model"] as string | undefined,
+                    isPartial: false,
+                  },
+                  url,
+                  timestamp + 1,
+                );
+              }
+            }
+
+            // Title update (new conversations only, final object)
+            if (isNew && result["title"] && conversationId) {
+              const titleObj = result["title"] as Record<string, unknown>;
+              const newTitle = titleObj["newTitle"] as string | undefined;
+              if (newTitle?.trim()) {
+                sendCapture(
+                  "xai",
+                  {
+                    type: "title_update",
+                    conversationId,
+                    title: newTitle.trim(),
+                  },
+                  url,
+                  timestamp,
+                );
+              }
+            }
+          }
+        })
+        .catch(() => undefined);
     }
 
     /** Returns true for Perplexity live-ask SSE endpoint. */
@@ -1362,6 +1541,64 @@ export function mainWorldInterceptor(): void {
             }
           })
           .catch(() => undefined);
+        return response;
+      }
+
+      // Intercept Grok single-conversation metadata (conversations_v2) → title_update
+      if (provider === "xai" && isGrokConversationsV2Url(url)) {
+        response
+          .clone()
+          .json()
+          .then((data: unknown) => {
+            if (data && typeof data === "object") {
+              const d = data as Record<string, unknown>;
+              const conv = d["conversation"] as Record<string, unknown> | undefined;
+              const conversationId = conv?.["conversationId"] as string | undefined;
+              const title = conv?.["title"] as string | undefined;
+              if (conversationId && title && title !== "New conversation") {
+                sendCapture(
+                  "xai",
+                  { type: "title_update", conversationId, title: title.trim() },
+                  url,
+                  timestamp,
+                );
+              }
+            }
+          })
+          .catch(() => undefined);
+        return response;
+      }
+
+      // Intercept Grok history (load-responses)
+      if (provider === "xai" && isGrokLoadResponsesUrl(url)) {
+        const conversationId = extractGrokConversationIdFromUrl(url);
+        if (conversationId) {
+          response
+            .clone()
+            .json()
+            .then((data: unknown) => {
+              if (data && typeof data === "object") {
+                const payload = {
+                  ...(data as Record<string, unknown>),
+                  _conversationId: conversationId,
+                };
+                sendCapture("xai", payload, url, timestamp);
+              }
+            })
+            .catch(() => undefined);
+        }
+        return response;
+      }
+
+      // Intercept Grok new conversation streaming (concatenated JSON)
+      if (provider === "xai" && isGrokNewConversationUrl(url)) {
+        handleGrokStreamingResponse(response.clone(), url, timestamp, true);
+        return response;
+      }
+
+      // Intercept Grok existing conversation streaming (concatenated JSON)
+      if (provider === "xai" && isGrokResponsesUrl(url)) {
+        handleGrokStreamingResponse(response.clone(), url, timestamp, false);
         return response;
       }
 

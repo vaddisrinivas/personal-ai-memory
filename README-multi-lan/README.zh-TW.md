@@ -5,17 +5,23 @@
 **你的對話，私密保存。**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/cjkjgbddkaoogdbfffiooeppnmbplpnh?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-green.svg)](https://developer.chrome.com/docs/extensions/mv3/)
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-supported-74aa9c?logo=openai&logoColor=white)](https://chatgpt.com)
+[![Claude](https://img.shields.io/badge/Claude-supported-d97757?logo=anthropic&logoColor=white)](https://claude.ai)
+[![Gemini](https://img.shields.io/badge/Gemini-supported-4285F4?logo=google&logoColor=white)](https://gemini.google.com)
+[![Perplexity](https://img.shields.io/badge/Perplexity-supported-20808D?logo=perplexity&logoColor=white)](https://perplexity.ai)
+[![Grok](https://img.shields.io/badge/Grok-supported-000000?logo=x&logoColor=white)](https://grok.com)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-🌐 [English](README.en.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [回到首頁](README.md)
+🌐 [English](README.en.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [回到首頁](../README.md)
 
 <a href="https://www.producthunt.com/products/personal-ai-memory?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-personal-ai-memory" target="_blank" rel="noopener noreferrer"><img alt="Personal AI Memory - Captures and stores your chat from various AI platforms | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1089387&amp;theme=light&amp;t=1772644496610"></a>
 </div>
 
 ---
 
-> 一個 Chrome 擴充套件，能在背景**靜默捕捉**你在 ChatGPT、Claude、Gemini、Perplexity 的對話，並以語意向量的方式儲存在本地端。透過一鍵 **Recall** 按鈕，將最相關的過去記憶注入新的對話中，讓 AI 了解你的歷史脈絡。
+> 一個 Chrome 擴充套件，能在背景**靜默捕捉**你在 ChatGPT、Claude、Gemini、Perplexity、Grok 的對話，並以語意向量的方式儲存在本地端。透過一鍵 **Recall** 按鈕，將最相關的過去記憶注入新的對話中，讓 AI 了解你的歷史脈絡。
 >
 > **100% 本地端。無雲端。無伺服器。無需帳號。**
 
@@ -26,7 +32,7 @@
 
 ### 一般使用者 — Chrome Web Store
 
-直接從 [Chrome Web Store](https://chrome.google.com/webstore/detail/cjkjgbddkaoogdbfffiooeppnmbplpnh) 安裝。
+直接從 [Chrome Web Store](https://chromewebstore.google.com/detail/personal-ai-memory-local/cjkjgbddkaoogdbfffiooeppnmbplpnh) 安裝。
 
 > **注意：** Chrome Web Store 版本更新可能較慢。如需最新功能，請至 [Releases](../../releases) 頁面下載最新 `.zip` 並手動載入（步驟如下）。
 
@@ -68,7 +74,7 @@ pnpm build
 
 | 功能 | 說明 |
 |------|------|
-| **被動捕捉** | 自動攔截 ChatGPT / Claude / Gemini 的對話，靜默儲存，無需任何手動操作 |
+| **被動捕捉** | 自動攔截 ChatGPT / Claude / Gemini / Perplexity / Grok 的對話，靜默儲存，無需任何手動操作。只要進入頁面，即可自動擷取上面已有的對話記錄。 |
 | **混合檢索** | 語意向量搜尋（時間衰減）× 關鍵字搜尋（BM25），以 RRF 融合排名 |
 | **一鍵召回** | 在 ChatGPT / Claude 輸入框旁點擊 Recall 按鈕，自動注入相關記憶作為 RAG 上下文 |
 | **本地備份** | 匯出 / 匯入完整備份（JSON，含語意向量） |
@@ -77,44 +83,60 @@ pnpm build
 | **8 種語系** | zh-TW · zh-CN · en · ja · ko · es · fr · de — 依瀏覽器 locale 自動切換 |
 | **深色 / 淺色主題** | Apple Liquid Glass 風格切換 |
 
-**支援平台：** ChatGPT（`chat.openai.com` / `chatgpt.com`）· Gemini（`gemini.google.com`）· Claude（`claude.ai`）
+**支援平台：** ChatGPT（`chat.openai.com` / `chatgpt.com`）· Gemini（`gemini.google.com`）· Claude（`claude.ai`）· Perplexity（`perplexity.ai`）· Grok（`grok.com`）
 
 ---
 
-# 如何匯出ChatGPT/Gemini聊天記錄？
+## 如何匯出聊天記錄？
 
+### ChatGPT 匯出步驟
 
-## ChatGPT 聊天紀錄匯出步驟
+1. 登入 ChatGPT 並進入主畫面。
+2. 點擊角落的「個人頭像」或「名稱」開啟選單。
+3. 選擇「Settings」（設定）。
+4. 進入「Data controls」（資料控制）頁籤。
+5. 找到「Export data」並點擊「Export」。
+6. 系統跳出確認視窗，點選「Confirm export」。
+7. 你的信箱將收到包含下載連結的郵件（可能需要等待最多 24 小時）。
+8. 下載 ZIP 解壓縮後，對話記錄檔案為 `conversations-00x.json`。
 
-1. 登入你的 ChatGPT 帳號並進入主畫面。
-2. 點擊畫面角落的「個人頭像」或「名稱」開啟選單。
-3. 選擇「Settings」(設定)。
-4. 進入「Data controls」(資料控制) 頁籤。
-5. 找到「Export data」(匯出資料) 選項並點擊「Export」(匯出)。
-6. 系統會跳出確認視窗，點選「Confirm export」(確認匯出)。
-7. 你的註冊信箱將會收到一封包含下載連結的電子郵件（注意：提出請求後，可能會需要等待高達 24 小時才會收到 export 信件）。
-8. 點擊郵件中的連結下載 ZIP 壓縮檔，解壓縮後裡面包含對話紀錄的檔案會是 `conversations-00x.json`。
+### Gemini 匯出步驟
 
+透過 Google Takeout 匯出：
 
-## Gemini 聊天紀錄匯出步驟
+1. 前往 [Google Takeout](https://takeout.google.com) 並登入。
+2. 點擊「取消全選」清除所有預設服務。
+3. 向下捲動，勾選「我的活動」（My Activity）（注意：不是選 ~~Gemini Apps~~）。
+4. 點擊「多種格式」按鈕。
+5. 將第一個活動格式從「HTML」改為「JSON」，點確定。
+6. 點擊「下一步」→ 選擇傳送方式 → 「建立匯出作業」。
+7. 等待郵件通知，解壓縮後檔案為 `my activity.json`。
 
-Gemini 的完整資料匯出是透過 Google Takeout (Google 匯出) 服務來進行整合的。
+### Claude 匯出步驟
 
-1. 登入你的 Google 帳號，並前往 [Google Takeout](https://takeout.google.com) 網頁。
-2. 點擊頁面頂部的「取消全選」，清除預設的所有 Google 服務。
-3. 向下捲動列表，找到並勾選「我的活動」(My Activity)（注意：不是選取 ~~Gemini Apps~~）。
-4. 點擊該區塊下方的「多種格式」按鈕。
-5. 在跳出的設定視窗中，將第一個活動紀錄的格式從「HTML」更改為「JSON」，並點選確定。
-6. 捲動到頁面最下方，點擊「下一步」。
-7. 選擇你要的傳送方式 (例如：以電子郵件傳送下載連結)，保留預設的檔案類型與大小上限後，點擊「建立匯出作業」。
-8. 等待系統處理完成並收到下載連結的電子郵件。下載解壓縮後，輸出的紀錄檔案會是 `my activity.json`。
+1. 前往 [https://claude.ai/settings/data-privacy-controls](https://claude.ai/settings/data-privacy-controls)。
+2. 點擊「Export data」。
+3. 等待下載連結郵件。
+4. 解壓縮後，對話記錄檔案為 `conversations.json`。
+
+### Perplexity
+
+> Perplexity **不支援**使用者資料匯出。必須逐一點擊對話頁面，由擴充套件自動捕捉。
+
+### Grok 匯出步驟
+
+1. 前往 [https://grok.com](https://grok.com)。
+2. 點擊左下角個人頭像 → **Settings** → **Data controls**。
+3. 點擊「Export Account Data」。
+4. 等待數小時後收到下載連結郵件。
+5. 解壓縮後，檔案為 `prod-grok-backend.json`。
 
 ---
 
 ## 它是如何運作的
 
 ```
-你在 ChatGPT / Claude / Gemini / Perplexity 聊天
+你在 ChatGPT / Claude / Gemini / Perplexity / Grok 聊天
         │  （擴充套件在背景靜默捕捉）
         ▼
 記憶儲存在本地 IndexedDB
@@ -200,11 +222,15 @@ src/
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 解析器
 │       ├── claude.ts          Claude SSE 解析器
-│       └── gemini.ts          Gemini XHR StreamGenerate 解析器
+│       ├── gemini.ts          Gemini XHR StreamGenerate 解析器 + 被動捕捉
+│       ├── perplexity.ts      Perplexity SSE 解析器
+│       └── grok.ts            Grok SSE 解析器
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world 橋接 + <title> MutationObserver
 │   ├── memory-float-ui.tsx    浮動面板 content script 入口
-│   └── chatgpt-injector.tsx   Recall 按鈕注入 + RAG prompt 組裝
+│   ├── chatgpt-injector.tsx   Recall 按鈕注入 + RAG prompt 組裝
+│   ├── gemini-injector.tsx    Gemini 被動捕捉 + Recall 按鈕
+│   └── grok-injector.tsx      Grok 被動捕捉
 ├── tabs/
 │   └── offscreen.tsx          ONNX 推論（Offscreen Document — 需要 DOM）
 ├── popup/
@@ -252,11 +278,15 @@ pnpm test:e2e          # E2E 測試（Playwright — 需先 build）
 
 ## 更新日誌
 
+### v0.0.4 — 2026-03-06
+- **新功能：** 支援 Grok（`grok.com`）— 瀏覽時靜默捕捉對話。
+- **新功能：** Gemini 被動訊息捕捉 — 進入頁面時，自動擷取頁面上已有的對話記錄。
+
 ### v0.0.3 — 2026-03-02
-- **新功能：** 支援 Perplexity（`perplexity.ai`）— 瀏覽時靜默捕捉對話。注意：Perplexity 不支援使用者資料匯出，因此必須逐一點擊對話才能收集記錄。
+- 支援 Perplexity（`perplexity.ai`）— 瀏覽時靜默捕捉對話。注意：Perplexity 不支援使用者資料匯出，因此必須逐一點擊對話才能收集記錄。
 
 ### v0.0.2 — 2026-03-01
-- **新功能：** 完整支援 Claude 網頁版（`claude.ai`）— 對話捕捉、Recall 按鈕注入、浮動記憶面板現已在 Claude 上運作
+- 完整支援 Claude 網頁版（`claude.ai`）— 對話捕捉、Recall 按鈕注入、浮動記憶面板現已在 Claude 上運作
 
 ### v0.0.1 — 初始版本
 - ChatGPT 與 Gemini 對話捕捉
