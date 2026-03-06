@@ -7,15 +7,25 @@ import {
 } from "../ui/memory-panel/FloatingMemoryPanel";
 
 export const config: PlasmoCSConfig = {
-  matches: [
-    "https://chat.openai.com/*",
-    "https://chatgpt.com/*",
-    "https://claude.ai/*",
-    "https://gemini.google.com/*",
-    "https://www.perplexity.ai/*",
-    "https://grok.com/*",
-  ],
+  matches: ["<all_urls>"],
 };
+
+const AI_HOSTNAMES = new Set([
+  "chat.openai.com",
+  "chatgpt.com",
+  "claude.ai",
+  "gemini.google.com",
+  "www.perplexity.ai",
+  "grok.com",
+]);
+
+function isAISite(): boolean {
+  try {
+    return AI_HOSTNAMES.has(new URL(window.location.href).hostname);
+  } catch {
+    return false;
+  }
+}
 
 const ROOT_ID = "ai-memory-float-root";
 
@@ -38,6 +48,7 @@ const bodyObserver = new MutationObserver(() => {
 chrome.runtime.onMessage.addListener(
   (msg: { type?: string }, _sender, sendResponse) => {
     if (msg?.type === "OPEN_MEMORY_PANEL") {
+      mountFloatUI();
       openMemoryPanelExternally();
       sendResponse();
       return true;
@@ -47,8 +58,12 @@ chrome.runtime.onMessage.addListener(
 );
 
 function start() {
-  mountFloatUI();
-  bodyObserver.observe(document.body, { childList: true });
+  if (isAISite()) {
+    mountFloatUI();
+    bodyObserver.observe(document.body, { childList: true });
+  } else {
+    // On non-AI sites, only mount when explicitly triggered via OPEN_MEMORY_PANEL
+  }
 }
 
 if (document.readyState === "loading") {
