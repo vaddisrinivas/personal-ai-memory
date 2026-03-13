@@ -80,7 +80,7 @@ pnpm build
 |---------|---------|
 | **Passive capture** | Auto-intercepts ChatGPT / Claude / Gemini / Perplexity / Grok — no setup, no clicks. Just visit the page and existing conversations are captured automatically. |
 | **Hybrid search** | Vector (time-decay) + BM25, fused with RRF for best-of-both results |
-| **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT and Claude |
+| **One-click Recall** | Injects relevant memories as a RAG prompt into ChatGPT, Claude, Gemini, Grok, and Perplexity |
 | **Local backup** | Export / import full backup as JSON (embeddings included) |
 | **Favourite Prompts** | Save, autocomplete (Trie), organise into drag-and-drop folders |
 | **Floating panel** | Draggable memory panel on every AI site |
@@ -149,7 +149,7 @@ Memories stored locally in IndexedDB
         │
         │  Later — you start a new chat
         ▼
-Click 🧠 Recall next to the ChatGPT / Claude input
+Click 🧠 Recall next to the input box on any supported AI site
         │
         ▼
 Hybrid search:
@@ -297,6 +297,14 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 ---
 
 ## Changelog
+
+### v0.0.5 — 2026-03-12
+- **Fix:** Gemini passive capture now uses updated DOM selectors (`<user-query>` / `<message-content>`) matching the current Gemini UI — conversations were silently missed after a Gemini front-end update.
+- **Fix:** Gemini duplicate-capture eliminated — stable deterministic record IDs and XHR debounce (1 s) prevent the same conversation from being stored again on page reload or mid-stream.
+- **Fix:** Recall button now shows a clear alert when the input is empty or memories have already been injected — prevents accidental double-injection on all platforms (ChatGPT, Claude, Gemini, Grok, Perplexity).
+- **Fix:** Recall-injected `[System Context]` template is stripped before saving — only the real user query is stored in memory.
+- **Fix:** Perplexity Recall button now appears immediately after the "Choose a model" button (correct position).
+- **Fix:** Gemini conversation title now reads from the sidebar item instead of `document.title` for more accurate session names.
 
 ### v0.0.4 — 2026-03-06
 - **New:** Grok (`grok.com`) support — conversations are silently captured while you browse.

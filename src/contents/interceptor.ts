@@ -88,12 +88,26 @@ function extractSessionId(payload: {
 }
 
 /**
+ * Get the best available page title for the current platform.
+ * For Gemini, reads from the active conversation item in the sidebar
+ * (more reliable than document.title which may include site suffixes).
+ */
+function getPageTitle(): string {
+  if (window.location.hostname === 'gemini.google.com') {
+    const el = document.querySelector<HTMLElement>('[aria-current="true"][data-test-id="conversation"] div')
+    const geminiTitle = el?.textContent?.trim()
+    if (geminiTitle) return geminiTitle
+  }
+  return document.title?.trim() ?? ''
+}
+
+/**
  * Update conversation title from current page title.
  */
 function updateConversationTitle(sessionId: string): void {
   if (!isExtensionContextValid()) return
 
-  const title = document.title?.trim()
+  const title = getPageTitle()
   if (!title) return
 
   try {

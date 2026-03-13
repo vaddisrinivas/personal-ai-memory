@@ -145,6 +145,11 @@ function searchMemories(query: string): Promise<SearchMemoriesResponse> {
 
 async function handleRecallClick(btn: HTMLButtonElement): Promise<void> {
   const query = getInputText().trim()
+  if (!query) { alert('[AI Memory] Please type your question first, then click Recall.'); return }
+  if (query.includes('[System Context: The following are relevant memories')) {
+    alert('[AI Memory] Memories already recalled. Clear the text and type your question again to recall fresh memories.')
+    return
+  }
   console.log('[AI Memory] Recall clicked, query:', query)
 
   btn.textContent = 'Searching...'
@@ -278,16 +283,20 @@ function createRecallButton(): HTMLElement {
 //   [button aria-label="Submit"]
 //
 // Strategy:
-//   1. Find "Dictation" button → walk up to its "div.relative" wrapper →
-//      insert before that wrapper (so Recall sits between model & dictation div).
-//   2. Fallback: find "Submit" button → insert before it.
-//   3. Last resort: find model button → insert after it.
+//   1. Find model button → insert immediately after it.
+//   2. Fallback: find "Dictation" button wrapper → insert before it.
+//   3. Last resort: find "Submit" button → insert before it.
 
 function findInsertionPoint(): { container: HTMLElement; before: HTMLElement | null } | null {
-  // Primary: find the div.relative wrapping the Dictation button, insert before it
+  // Primary: insert immediately after the "Choose a model" button
+  const modelBtn = document.querySelector<HTMLElement>('button[aria-label="Choose a model"]')
+  if (modelBtn?.parentElement) {
+    return { container: modelBtn.parentElement as HTMLElement, before: modelBtn.nextElementSibling as HTMLElement | null }
+  }
+
+  // Fallback: find the div.relative wrapping the Dictation button, insert before it
   const dictationBtn = document.querySelector<HTMLElement>('button[aria-label="Dictation"]')
   if (dictationBtn) {
-    // Walk up to find the div.relative ancestor
     let el: HTMLElement | null = dictationBtn.parentElement
     while (el && !(el.tagName === 'DIV' && el.classList.contains('relative'))) {
       el = el.parentElement
@@ -296,22 +305,15 @@ function findInsertionPoint(): { container: HTMLElement; before: HTMLElement | n
     if (dictationWrapper?.parentElement) {
       return { container: dictationWrapper.parentElement as HTMLElement, before: dictationWrapper }
     }
-    // Wrapper not found — fall back to inserting before the button itself
     if (dictationBtn.parentElement) {
       return { container: dictationBtn.parentElement as HTMLElement, before: dictationBtn }
     }
   }
 
-  // Fallback: insert before the Submit button
+  // Last resort: insert before the Submit button
   const submitBtn = document.querySelector<HTMLElement>('button[aria-label="Submit"]')
   if (submitBtn?.parentElement) {
     return { container: submitBtn.parentElement as HTMLElement, before: submitBtn }
-  }
-
-  // Last resort: insert after the model button
-  const modelBtn = document.querySelector<HTMLElement>('button[aria-label="Choose a model"]')
-  if (modelBtn?.parentElement) {
-    return { container: modelBtn.parentElement as HTMLElement, before: modelBtn.nextElementSibling as HTMLElement | null }
   }
 
   return null

@@ -1261,7 +1261,7 @@ export function mainWorldInterceptor(): void {
       }
 
       const assembled = contentChunks.join("");
-      if (assembled) {
+      if (assembled && !isPartialRef.value) {
         sendCapture(
           provider,
           {
@@ -1269,7 +1269,7 @@ export function mainWorldInterceptor(): void {
             content: assembled,
             conversationId: conversationId ?? String(timestamp),
             model,
-            isPartial: isPartialRef.value,
+            isPartial: false,
           },
           url,
           timestamp,
@@ -1680,6 +1680,10 @@ export function mainWorldInterceptor(): void {
 
     const OriginalXHR = window.XMLHttpRequest;
 
+    // Debounce Gemini XHR captures: Gemini sends multiple XHR responses during streaming
+    // (each with the cumulative text so far). We only want to store the final complete response.
+    const _geminiCaptureTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
     class InterceptedXMLHttpRequest extends OriginalXHR {
       private _url = "";
       private _method = "";
@@ -1774,7 +1778,19 @@ export function mainWorldInterceptor(): void {
                   };
                   if (conversationId)
                     payload["conversationId"] = conversationId;
-                  sendCapture("google", payload, this._url, this._timestamp);
+                  // Debounce: Gemini streams via multiple XHR requests; only capture the last one.
+                  const debounceKey = (conversationId || this._url) as string;
+                  const existing = _geminiCaptureTimers.get(debounceKey);
+                  if (existing) clearTimeout(existing);
+                  const captureUrl = this._url;
+                  const captureTs = this._timestamp;
+                  _geminiCaptureTimers.set(
+                    debounceKey,
+                    setTimeout(() => {
+                      _geminiCaptureTimers.delete(debounceKey);
+                      sendCapture("google", payload, captureUrl, captureTs);
+                    }, 1000),
+                  );
                 }
               } else if (contentType.includes("application/json") && provider) {
                 const data = JSON.parse(this.responseText as string) as unknown;

@@ -18,6 +18,7 @@ import { GeminiAdapter } from "./adapters/gemini";
 import { PerplexityAdapter } from "./adapters/perplexity";
 import { GrokAdapter } from "./adapters/grok";
 import type { IAdapter } from "./adapters/base";
+import { stripRecallTemplate } from "./adapters/base";
 import { db, isCaptureEnabled, isQuotaExceeded, safeAddRecord } from "./db";
 import type {
   CaptureMessage,
@@ -138,6 +139,18 @@ async function handleCaptureMessage(
     return { success: false, error: "No records extracted" };
   }
 
+  // Strip recall-injected templates from user messages
+  records = records.flatMap(record => {
+    if (record.role !== 'user') return [record]
+    const cleaned = stripRecallTemplate(record.content)
+    if (cleaned === null) return []
+    if (cleaned === record.content) return [record]
+    return [{ ...record, content: cleaned }]
+  })
+  if (!records.length) {
+    return { success: false, error: 'No records after recall template filter' }
+  }
+
   // Dedup chat history records (fromHistory=true):
   // If the session already has any records (e.g. captured via SSE), skip writing new records
   // to avoid duplicating messages.
@@ -150,7 +163,7 @@ async function handleCaptureMessage(
     if (sessionExists) {
       return { success: true, recordId: undefined };
     }
-    // Session is new — still dedup individual UUIDs in case of partial prior writes
+    // Session is new — still dedup individual IDs in case of partial prior writes
     const allIds = records.map((r) => r.id);
     const newIds = new Set(await db.filterNewChatMessageUuids(allIds));
     records = records.filter((r) => newIds.has(r.id));
@@ -980,11 +993,6 @@ async function maybeFetchPerplexityThreadHistory(
         timestamp: Date.now(),
       },
     });
-    console.log(
-      "[AI Memory] Perplexity bg fetch captured thread history:",
-      slug,
-      result,
-    );
   } catch (err) {
     console.warn("[AI Memory] Perplexity bg fetch error for slug:", slug, err);
   }

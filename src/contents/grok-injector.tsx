@@ -150,6 +150,11 @@ function searchMemories(query: string): Promise<SearchMemoriesResponse> {
 
 async function handleRecallClick(btn: HTMLButtonElement): Promise<void> {
   const query = getInputText()
+  if (!query.trim()) { alert('[AI Memory] Please type your question first, then click Recall.'); return }
+  if (query.includes('[System Context: The following are relevant memories')) {
+    alert('[AI Memory] Memories already recalled. Clear the text and type your question again to recall fresh memories.')
+    return
+  }
 
   btn.textContent = 'Searching...'
   btn.disabled = true

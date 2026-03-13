@@ -7,6 +7,19 @@ import {
 } from './base'
 
 /**
+ * Fast deterministic hash for stable record IDs (DOM history dedup).
+ * Using random IDs (generateRecordId) means page-reload re-captures the same
+ * messages because filterNewChatMessageUuids can never find a match.
+ */
+function stableHash(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) ^ s.charCodeAt(i)) | 0
+  }
+  return (h >>> 0).toString(36)
+}
+
+/**
  * GeminiAdapter handles Google Gemini network payloads.
  *
  * Gemini web uses:
@@ -39,6 +52,12 @@ export class GeminiAdapter implements IAdapter {
     if (!rawData || typeof rawData !== 'object') return []
     const data = rawData as Record<string, unknown>
 
+    // DOM history batch format (from gemini-injector):
+    // { turns: [{role, content, timestamp}], conversationId, fromHistory: true }
+    if (Array.isArray(data['turns'])) {
+      return this.parseTurnsBatch(data, timestamp)
+    }
+
     // Gemini API generateContent response:
     // { candidates: [{ content: { role, parts: [{text}] }, finishReason }], ... }
     if (Array.isArray(data['candidates'])) {
@@ -52,6 +71,48 @@ export class GeminiAdapter implements IAdapter {
     }
 
     return []
+  }
+
+  private parseTurnsBatch(
+    data: Record<string, unknown>,
+    _timestamp: number
+  ): MemoryRecord[] {
+    const turns = data['turns'] as Array<Record<string, unknown>>
+    const conversationId =
+      typeof data['conversationId'] === 'string' && data['conversationId'].trim()
+        ? (data['conversationId'] as string).trim()
+        : 'unknown'
+    const sessionId = generateSessionId('google', conversationId)
+    const records: MemoryRecord[] = []
+
+    for (const turn of turns) {
+      const role = turn['role'] as string
+      const content = turn['content'] as string
+      const ts = typeof turn['timestamp'] === 'number' ? turn['timestamp'] : Date.now()
+      if (!role || !content) continue
+
+      // Stable ID so filterNewChatMessageUuids deduplicates correctly on page reload
+      const id =
+        conversationId !== 'unknown'
+          ? `google:${conversationId}:${role === 'user' ? 'u' : 'a'}:${stableHash(content)}`
+          : generateRecordId()
+
+      records.push({
+        id,
+        role: role === 'user' ? 'user' : 'assistant',
+        content: normalizeContent(content),
+        provider: 'google',
+        sessionId,
+        timestamp: ts,
+        createdAt: Date.now(),
+        isPartial: false,
+        isDeleted: false,
+        isSuperseded: false,
+        metadata: { fromHistory: true },
+      })
+    }
+
+    return records
   }
 
   private parseApiResponse(
@@ -111,9 +172,18 @@ export class GeminiAdapter implements IAdapter {
       typeof raw === 'string' && raw.trim() ? raw.trim() : 'unknown'
     const isPartial = Boolean(data['isPartial'])
     const metadata = data['metadata'] as Record<string, unknown> | undefined
+    const fromHistory = metadata?.['fromHistory'] === true
+
+    // Use a stable deterministic ID for DOM history records so that
+    // filterNewChatMessageUuids can deduplicate across page reloads.
+    // Random IDs (generateRecordId) would re-capture the same messages every reload.
+    const id =
+      fromHistory && conversationId !== 'unknown'
+        ? `google:${conversationId}:${role === 'user' ? 'u' : 'a'}:${stableHash(content)}`
+        : generateRecordId()
 
     const record: MemoryRecord = {
-      id: generateRecordId(),
+      id,
       role: role === 'user' ? 'user' : 'assistant',
       content: normalizeContent(content),
       provider: 'google',

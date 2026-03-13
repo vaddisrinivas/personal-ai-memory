@@ -119,6 +119,11 @@ function searchMemories(query: string): Promise<SearchMemoriesResponse> {
 
 async function handleRecallClick(btn: HTMLButtonElement): Promise<void> {
   const query = getInputText()
+  if (!query.trim()) { alert('[AI Memory] Please type your question first, then click Recall.'); return }
+  if (query.includes('[System Context: The following are relevant memories')) {
+    alert('[AI Memory] Memories already recalled. Clear the text and type your question again to recall fresh memories.')
+    return
+  }
 
   btn.textContent = 'Searching...'
   btn.disabled = true
@@ -318,17 +323,21 @@ function tryInjectButton(): void {
 // Gemini DOM structure (as of 2026):
 //
 //   User turn:
-//     <span class="user-query-bubble-with-background ...">
-//       <p class="query-text-line ng-star-inserted">…</p>
-//       <p class="query-text-line ng-star-inserted">…</p>  ← multiple chunks
-//     </span>
+//     <user-query>
+//       …
+//       <p class="query-text-line ng-star-inserted">…</p>  ← one per text line
+//       …
+//     </user-query>
 //
 //   Assistant turn:
-//     <div id="message-content-id-r_<id>" class="...">
-//       <div class="markdown markdown-main-panel ...">…</div>
-//     </div>
+//     <message-content>
+//       <div class="inline-copy-host">
+//         <div class="markdown markdown-main-panel …">…</div>
+//       </div>
+//     </message-content>
 //
-// The conversation is interleaved in document order: user, assistant, user, ...
+// querySelectorAll('user-query, message-content') returns both element types in
+// document order, giving us the interleaved conversation sequence for free.
 
 const POST_TYPE = '__ai_memory_capture__'
 const DOM_SYNC_URL = 'https://gemini.google.com/dom-sync'
@@ -341,76 +350,85 @@ function extractGeminiConversationId(): string | null {
   return m ? m[1] : null
 }
 
-/** Collect text from a user turn bubble (joins multiple query-text-line chunks). */
-function extractUserText(bubble: Element): string {
-  const lines = bubble.querySelectorAll<HTMLElement>('p.query-text-line')
-  if (lines.length > 0) {
-    return Array.from(lines).map((p) => p.innerText?.trim() ?? '').filter(Boolean).join('\n')
-  }
-  return (bubble as HTMLElement).innerText?.trim() ?? ''
-}
-
-/** Collect text from an assistant response container. */
-function extractAssistantText(container: Element): string {
-  // Prefer the markdown panel's rendered text
-  const md = container.querySelector<HTMLElement>('.markdown.markdown-main-panel')
-  if (md) return md.innerText?.trim() ?? ''
-  return (container as HTMLElement).innerText?.trim() ?? ''
-}
-
 interface ScrapedTurn {
   role: 'user' | 'assistant'
   content: string
 }
 
-/** Walk the DOM in document order and collect all conversation turns.
- *  querySelectorAll with a comma-separated selector guarantees DOM order. */
+/**
+ * Walk the DOM in document order and collect all conversation turns.
+ * Uses the custom elements <user-query> and <message-content> as stable turn
+ * boundaries — no marker sorting needed since querySelectorAll preserves DOM order.
+ */
 function scrapeConversationTurns(): ScrapedTurn[] {
   const turns: ScrapedTurn[] = []
 
-  // Single query preserves DOM document order — no sorting needed.
-  const els = document.querySelectorAll<Element>(
-    'span.user-query-bubble-with-background, [id^="message-content-id-r_"]'
-  )
+  const els = document.querySelectorAll<Element>('user-query, message-content')
 
   for (const el of els) {
-    if (el.matches('span.user-query-bubble-with-background')) {
-      const content = extractUserText(el)
-      if (content) turns.push({ role: 'user', content })
+    if (el.tagName.toLowerCase() === 'user-query') {
+      // Collect all text lines from the user bubble
+      const lines = el.querySelectorAll<HTMLElement>('p.query-text-line')
+      if (lines.length > 0) {
+        const content = Array.from(lines)
+          .map((p) => p.innerText?.trim() ?? '')
+          .filter(Boolean)
+          .join('\n')
+        if (content) turns.push({ role: 'user', content })
+      }
     } else {
-      const content = extractAssistantText(el)
-      if (content) turns.push({ role: 'assistant', content })
+      // message-content: grab the rendered markdown panel
+      const md = el.querySelector<HTMLElement>('.markdown.markdown-main-panel')
+      if (md) {
+        const content = md.innerText?.trim() ?? ''
+        if (content) turns.push({ role: 'assistant', content })
+      }
     }
   }
 
   return turns
 }
 
+// Tracks which conversations already have an active observer (prevents duplicate observers).
 const _scannedConversations = new Set<string>()
+// Tracks content keys already sent per conversation (prevents re-sending within one page session).
+const _sentContent = new Map<string, Set<string>>()
 
-function sendCapturedTurn(role: 'user' | 'assistant', content: string, conversationId: string): void {
+function runDomSync(conversationId: string): void {
+  const turns = scrapeConversationTurns()
+  if (!turns.length) return
+
+  if (!_sentContent.has(conversationId)) _sentContent.set(conversationId, new Set())
+  const sent = _sentContent.get(conversationId)!
+
+  // Filter to only new turns and assign sequential timestamps for correct ordering.
+  const baseTs = Date.now()
+  const newTurns: Array<{ role: string; content: string; timestamp: number }> = []
+  for (const turn of turns) {
+    const key = `${turn.role}:${turn.content}`
+    if (sent.has(key)) continue
+    sent.add(key)
+    newTurns.push({ role: turn.role, content: turn.content, timestamp: baseTs + newTurns.length })
+  }
+
+  if (!newTurns.length) return
+
+  // Send all turns in ONE postMessage so the background handler receives them as a
+  // batch. Session-level dedup in the background (hasSessionRecords) works correctly
+  // only when all records for a conversation arrive together — sending one-at-a-time
+  // caused the second message onward to be dropped after the first was stored.
   window.postMessage(
     {
       type: POST_TYPE,
       payload: {
         provider: 'google',
-        rawData: { role, content, conversationId, isPartial: false, metadata: { fromHistory: true } },
+        rawData: { turns: newTurns, conversationId, fromHistory: true },
         url: DOM_SYNC_URL,
-        timestamp: Date.now(),
+        timestamp: baseTs,
       },
     },
     window.location.origin
   )
-}
-
-function runDomSync(conversationId: string): void {
-  if (_scannedConversations.has(conversationId)) return
-  _scannedConversations.add(conversationId)
-
-  const turns = scrapeConversationTurns()
-  for (const turn of turns) {
-    sendCapturedTurn(turn.role, turn.content, conversationId)
-  }
 }
 
 /**
@@ -426,8 +444,12 @@ function waitForDomAndSync(conversationId: string): void {
   const SETTLE_MS = 600
   const MAX_WAIT_MS = 15_000
 
+  // Mark as being watched immediately to prevent duplicate observers from maybeSyncConversation
+  _scannedConversations.add(conversationId)
+
   let settleTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Hard timeout: disconnect observer and do a final scrape after MAX_WAIT_MS
   const hardTimeout = setTimeout(() => {
     syncObserver.disconnect()
     if (settleTimer) clearTimeout(settleTimer)
@@ -435,8 +457,8 @@ function waitForDomAndSync(conversationId: string): void {
   }, MAX_WAIT_MS)
 
   function onSettle(): void {
-    syncObserver.disconnect()
-    clearTimeout(hardTimeout)
+    // Scrape on each settle (content dedup in sendCapturedTurn prevents re-sending).
+    // Keep the observer alive so lazy-loaded older messages (e.g. scrolling up) are also captured.
     runDomSync(conversationId)
   }
 
@@ -448,8 +470,8 @@ function waitForDomAndSync(conversationId: string): void {
   const syncObserver = new MutationObserver(resetSettle)
   syncObserver.observe(document.body, { childList: true, subtree: true })
 
-  // If bubbles are already present, start the settle timer immediately
-  if (document.querySelector('span.user-query-bubble-with-background')) {
+  // If conversation elements are already present, start the settle timer immediately
+  if (document.querySelector('user-query, message-content')) {
     resetSettle()
   }
 }

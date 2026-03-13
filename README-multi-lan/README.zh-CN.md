@@ -76,7 +76,7 @@ pnpm build
 |------|------|
 | **被动捕获** | 自动拦截 ChatGPT / Claude / Gemini / Perplexity / Grok 的对话，静默存储，无需任何手动操作。只要进入页面，即可自动擷取已有的对话记录。 |
 | **混合检索** | 语义向量搜索（时间衰减）× 关键字搜索（BM25），以 RRF 融合排名 |
-| **一键召回** | 在 ChatGPT / Claude 输入框旁点击 Recall 按钮，自动注入相关记忆作为 RAG 上下文 |
+| **一键召回** | 在所有支持平台的输入框旁点击 Recall 按钮，自动注入相关记忆作为 RAG 上下文 |
 | **本地备份** | 导出 / 导入完整备份（JSON，含语义向量） |
 | **常用 Prompt** | 存储提示词，支持 Trie 自动建议、文件夹分类、拖拽整理 |
 | **浮动面板** | 每个 AI 网站上的可拖拽记忆面板 |
@@ -145,7 +145,7 @@ pnpm build
         │
         │  之后 — 你开始新的对话
         ▼
-点击 ChatGPT / Claude 输入框旁的 🧠 Recall
+点击任意支持平台输入框旁的 🧠 Recall
         │
         ▼
 混合搜索：
@@ -277,6 +277,14 @@ pnpm test:e2e          # E2E 测试（Playwright — 需先 build）
 ---
 
 ## 更新日志
+
+### v0.0.5 — 2026-03-12
+- **修复：** Gemini 被动捕获改用最新 DOM 选择器（`<user-query>` / `<message-content>`）以适应 Gemini 界面更新 — 旧版选择器已失效，导致对话静默遗漏。
+- **修复：** 消除 Gemini 重复捕获问题 — 稳定的确定性 Record ID 配合 XHR debounce（1 秒）防止页面重载或流式传输中途重复存储同一对话。
+- **修复：** Recall 按钮现在在输入框为空或已注入记忆时显示明确提示 — 防止所有平台（ChatGPT、Claude、Gemini、Grok、Perplexity）误触重复注入。
+- **修复：** 保存前自动过滤 Recall 注入的 `[System Context]` 模板 — 只保留真正的用户问题。
+- **修复：** Perplexity Recall 按钮现在正确显示在"选择模型"按钮旁（位置修正）。
+- **修复：** Gemini 对话标题改从侧边栏项目读取，不再依赖 `document.title`，Session 名称更准确。
 
 ### v0.0.4 — 2026-03-06
 - **新功能：** 支持 Grok（`grok.com`）— 浏览时静默捕捉对话。

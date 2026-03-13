@@ -78,7 +78,7 @@ pnpm build
 |----------------|---------|
 | **Capture passive** | Intercepte automatiquement ChatGPT / Claude / Gemini / Perplexity / Grok — sans configuration, sans clics. Visitez simplement la page et les conversations existantes sont capturées automatiquement. |
 | **Recherche hybride** | Vectorielle (décroissance temporelle) + BM25, fusionnées avec RRF pour les meilleurs résultats |
-| **Recall en un clic** | Injecte les mémoires pertinentes comme prompt RAG dans ChatGPT et Claude |
+| **Recall en un clic** | Injecte les mémoires pertinentes comme prompt RAG sur toutes les plateformes compatibles |
 | **Sauvegarde locale** | Exportez / importez une sauvegarde complète en JSON (embeddings inclus) |
 | **Prompts favoris** | Sauvegarder, autocomplétion (Trie), organiser en dossiers glisser-déposer |
 | **Panneau flottant** | Panneau mémoire déplaçable sur chaque site IA |
@@ -147,7 +147,7 @@ Mémoires stockées localement dans IndexedDB
         │
         │  Plus tard — vous démarrez un nouveau chat
         ▼
-Cliquez sur 🧠 Recall à côté du champ de saisie ChatGPT / Claude
+Cliquez sur 🧠 Recall à côté du champ de saisie sur n'importe quelle plateforme compatible
         │
         ▼
 Recherche hybride :
@@ -279,6 +279,14 @@ pnpm test:e2e          # Tests E2E (Playwright — exécuter pnpm build d'abord)
 ---
 
 ## Journal des modifications
+
+### v0.0.5 — 2026-03-12
+- **Correctif :** La capture passive Gemini utilise désormais des sélecteurs DOM mis à jour (`<user-query>` / `<message-content>`) correspondant à l'interface actuelle de Gemini — les conversations étaient silencieusement manquées après une mise à jour du frontend.
+- **Correctif :** Capture en double Gemini éliminée — des IDs de record stables déterministes et un debounce XHR (1 s) empêchent le même contenu d'être réenregistré lors du rechargement ou en cours de streaming.
+- **Correctif :** Le bouton Recall affiche désormais une alerte claire si le champ est vide ou si des souvenirs ont déjà été injectés — évite la double injection accidentelle sur toutes les plateformes (ChatGPT, Claude, Gemini, Grok, Perplexity).
+- **Correctif :** Le modèle `[System Context]` injecté par Recall est supprimé avant l'enregistrement — seule la vraie requête de l'utilisateur est conservée en mémoire.
+- **Correctif :** Le bouton Recall de Perplexity s'affiche maintenant correctement juste après le bouton « Choisir un modèle ».
+- **Correctif :** Le titre de conversation Gemini est maintenant lu depuis l'élément de la barre latérale plutôt que depuis `document.title` pour des noms de session plus précis.
 
 ### v0.0.4 — 2026-03-06
 - **Nouveau :** Support de Grok (`grok.com`) — les conversations sont capturées silencieusement pendant la navigation.
