@@ -198,7 +198,7 @@ This extension intercepts your AI conversations. Here is exactly what it does an
 | Question | Answer |
 |----------|--------|
 | Where is data stored? | **Browser-local IndexedDB only** (`AIMemoryDB`) — never leaves your device |
-| Does it make network requests? | **Only once** — to download the ONNX embedding model on first run. No conversation data is ever uploaded. |
+| Does it make network requests? | **Conversation data never leaves your device.** Two types of optional network requests occur: (1) ONNX model download on first run; (2) anonymous usage analytics (if enabled) — event names only, no conversation content, no URLs, no personal data. Analytics can be disabled in Settings → Privacy. |
 | Can websites see my memories? | No. Data is isolated in the extension's storage, inaccessible to page scripts. |
 | Can I delete my data? | Yes — soft-delete individual records from the floating panel, or clear all via DevTools → IndexedDB. |
 
@@ -293,6 +293,10 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 - **Fix:** Recall-injected `[System Context]` template is stripped before saving — only the real user query is stored in memory.
 - **Fix:** Perplexity Recall button now appears immediately after the "Choose a model" button (correct position).
 - **Fix:** Gemini conversation title now reads from the sidebar item instead of `document.title` for more accurate session names.
+- **Fix:** Gemini text injection rewritten for more reliable input handling.
+- **Fix:** Grok input detection improved — no more false "empty input" errors.
+- **Fix:** Memory list deduplication improved for Gemini and ChatGPT sessions.
+- **Improvement:** Recall button alerts now follow the extension's display language.
 
 ### v0.0.4 — 2026-03-06
 - **New:** Grok (`grok.com`) support — conversations are silently captured while you browse.

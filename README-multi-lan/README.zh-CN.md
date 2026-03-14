@@ -285,6 +285,10 @@ pnpm test:e2e          # E2E 测试（Playwright — 需先 build）
 - **修复：** 保存前自动过滤 Recall 注入的 `[System Context]` 模板 — 只保留真正的用户问题。
 - **修复：** Perplexity Recall 按钮现在正确显示在"选择模型"按钮旁（位置修正）。
 - **修复：** Gemini 对话标题改从侧边栏项目读取，不再依赖 `document.title`，Session 名称更准确。
+- **修复：** Gemini 文字注入逻辑改写，输入处理更稳定。
+- **修复：** Grok 输入检测改善 — 不再出现误判「输入为空」的提示。
+- **修复：** 记忆列表去重改善，解决 Gemini 与 ChatGPT 的重复条目问题。
+- **改善：** Recall 按钮提示消息现在跟随扩展的显示语言。
 
 ### v0.0.4 — 2026-03-06
 - **新功能：** 支持 Grok（`grok.com`）— 浏览时静默捕捉对话。

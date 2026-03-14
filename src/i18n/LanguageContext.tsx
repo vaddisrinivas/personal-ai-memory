@@ -1,26 +1,7 @@
-import React, { createContext, useCallback, useContext, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { LangCode, Translations } from './translations'
 import { LANG_NAMES, translations } from './translations'
-
-const STORAGE_KEY = 'ai-memory-lang'
-
-function detectLang(): LangCode {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY) as LangCode | null
-    if (stored && stored in translations) return stored
-  } catch {
-    // localStorage may be unavailable in some extension contexts
-  }
-  const nav = navigator.language ?? ''
-  if (nav.startsWith('zh-TW') || nav.startsWith('zh-Hant')) return 'zh-TW'
-  if (nav.startsWith('zh')) return 'zh-CN'
-  if (nav.startsWith('ja')) return 'ja'
-  if (nav.startsWith('ko')) return 'ko'
-  if (nav.startsWith('es')) return 'es'
-  if (nav.startsWith('fr')) return 'fr'
-  if (nav.startsWith('de')) return 'de'
-  return 'en'
-}
+import { detectDefaultLang, loadLangFromChrome, readLangFromLocalStorage, writeLangToLocalStorage, saveLangToChrome } from './lang-storage'
 
 interface LanguageContextValue {
   lang: LangCode
@@ -41,15 +22,36 @@ const LanguageContext = createContext<LanguageContextValue>({
 })
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<LangCode>(detectLang)
+  const [lang, setLangState] = useState<LangCode>(() => {
+    const nav = typeof navigator !== 'undefined' ? navigator.language ?? '' : 'en'
+    return detectDefaultLang(nav)
+  })
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      const fromLocal = readLangFromLocalStorage()
+      if (!cancelled && fromLocal) {
+        setLangState(fromLocal)
+      }
+
+      const fromChrome = await loadLangFromChrome()
+      if (!cancelled && fromChrome) {
+        setLangState(fromChrome)
+        writeLangToLocalStorage(fromChrome)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const setLang = useCallback((next: LangCode) => {
     setLangState(next)
-    try {
-      localStorage.setItem(STORAGE_KEY, next)
-    } catch {
-      // ignore
-    }
+    writeLangToLocalStorage(next)
+    void saveLangToChrome(next)
   }, [])
 
   return (

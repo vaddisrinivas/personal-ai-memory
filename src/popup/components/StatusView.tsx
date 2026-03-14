@@ -42,7 +42,7 @@ export function StatusView({
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <span style={styles.title}>AI Memory</span>
+        <span style={styles.title}>Personal AI Memory</span>
         <span style={styles.localBadge}>🔒 Local Only</span>
       </div>
 

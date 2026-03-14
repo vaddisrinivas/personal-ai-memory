@@ -130,7 +130,7 @@ const THEME_TRANSITION_CSS = `
 const MARGIN = 16;
 const LOGO_SIZE = 60;
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
+// ── Hooks & Small Components ───────────────────────────────────────────────────
 
 function useViewportClamp() {
   const [bounds, setBounds] = useState({ width: PANEL_WIDTH, height: 560 });
@@ -149,6 +149,7 @@ function useViewportClamp() {
   }, []);
   return bounds;
 }
+
 
 function clampLogoTop(top: number) {
   const vh = window.innerHeight;
@@ -420,7 +421,7 @@ function FloatingMemoryPanelInner() {
           role="button"
           tabIndex={0}
           onKeyDown={(e) => e.key === "Enter" && openPanel()}
-          title="AI Memory"
+          title="Personal AI Memory"
         >
           <img
             src={
@@ -428,7 +429,7 @@ function FloatingMemoryPanelInner() {
                 ? chrome.runtime.getURL("assets/icon.png")
                 : ""
             }
-            alt="AI Memory"
+            alt="Personal AI Memory"
             width={36}
             height={36}
             style={{ display: "block", pointerEvents: "none", borderRadius: 8 }}
@@ -563,8 +564,9 @@ function FloatingMemoryPanelInner() {
                     fill="none"
                     style={{
                       flexShrink: 0,
-                      opacity: 0.35,
+                      opacity: 0.65,
                       pointerEvents: "none",
+                      color: tk.textMuted,
                     }}
                   >
                     <circle cx="1.5" cy="1.5" r="1.5" fill="currentColor" />
@@ -582,7 +584,7 @@ function FloatingMemoryPanelInner() {
                       letterSpacing: "-0.02em",
                     }}
                   >
-                    AI Memory
+                    Personal AI Memory
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -732,7 +734,9 @@ function FloatingMemoryPanelInner() {
                           borderColor: tk.border,
                           color: tk.text,
                         }}
-                        onClick={() => setPanelView("folder")}
+                        onClick={() => {
+                          setPanelView("folder");
+                        }}
                       >
                         <span style={panelMenuIconWrap}>
                           <FolderIcon />

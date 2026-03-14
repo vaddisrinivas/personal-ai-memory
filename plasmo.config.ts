@@ -12,6 +12,8 @@ export default defineConfig({
         "https://gemini.google.com/*",
         "https://www.perplexity.ai/*",
         "https://grok.com/*",
+        // Add your API Gateway domain here after deploying lambda-proxy, e.g.:
+        // "https://abc123.execute-api.us-east-1.amazonaws.com/*",
       ],
       action: {
         default_title: "Personal AI Memory",

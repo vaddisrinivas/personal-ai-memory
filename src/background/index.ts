@@ -196,7 +196,18 @@ async function handleCaptureMessage(
   }
 
   lastCaptureTime = Date.now();
-  broadcastStatusUpdate();
+  void broadcastStatusUpdate();
+
+  if (ids.length > 0) {
+    // Notify onboarding on first-ever memory saved via storage (works across all extension contexts)
+    const { onboarding_first_memory_saved, onboarding_step2_active } = await chrome.storage.local.get([
+      'onboarding_first_memory_saved',
+      'onboarding_step2_active',
+    ])
+    if (onboarding_step2_active && !onboarding_first_memory_saved) {
+      chrome.storage.local.set({ onboarding_first_memory_saved: true })
+    }
+  }
 
   return { success: true, recordId: ids[0] };
 }
@@ -846,6 +857,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         );
       return true;
 
+    case "FIRST_RECALL_USED":
+      // Forward to onboarding via storage so all extension contexts can react
+      chrome.storage.local.set({ onboarding_first_recall_used: true })
+      sendResponse({ success: true })
+      return false
+
     default:
       break;
   }
@@ -1013,6 +1030,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     void maybeFetchPerplexityThreadHistory(url);
   }
 });
+
+// Open onboarding tab on first install
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    const { onboarding_completed } = await chrome.storage.local.get('onboarding_completed')
+    if (!onboarding_completed) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('tabs/onboarding.html') })
+    }
+  }
+})
 
 // Inject into already-open AI tabs when extension loads (e.g. user had ChatGPT
 // open before installing or reloading the extension).

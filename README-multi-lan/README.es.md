@@ -286,6 +286,10 @@ pnpm test:e2e          # Pruebas E2E (Playwright — ejecutar pnpm build primero
 - **Corrección:** La plantilla `[System Context]` inyectada por Recall se elimina antes de guardar — solo se almacena la consulta real del usuario.
 - **Corrección:** El botón Recall de Perplexity ahora aparece correctamente junto al botón "Elegir modelo".
 - **Corrección:** El título de conversación de Gemini ahora se lee desde el elemento de la barra lateral en lugar de `document.title` para nombres de sesión más precisos.
+- **Corrección:** La inyección de texto de Gemini fue reescrita para un manejo de entrada más confiable.
+- **Corrección:** Detección de entrada de Grok mejorada — sin más errores falsos de "entrada vacía".
+- **Corrección:** Deduplicación de la lista de memoria mejorada para sesiones de Gemini y ChatGPT.
+- **Mejora:** Las alertas del botón Recall ahora siguen el idioma de visualización de la extensión.
 
 ### v0.0.4 — 2026-03-06
 - **Nuevo:** Soporte para Grok (`grok.com`) — las conversaciones se capturan silenciosamente mientras navegas.

@@ -305,6 +305,10 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 - **Fix:** Recall-injected `[System Context]` template is stripped before saving — only the real user query is stored in memory.
 - **Fix:** Perplexity Recall button now appears immediately after the "Choose a model" button (correct position).
 - **Fix:** Gemini conversation title now reads from the sidebar item instead of `document.title` for more accurate session names.
+- **Fix:** Gemini text injection rewritten for more reliable input handling.
+- **Fix:** Grok input detection improved — no more false "empty input" errors.
+- **Fix:** Memory list deduplication improved for Gemini and ChatGPT sessions.
+- **Improvement:** Recall button alerts now follow the extension's display language.
 
 ### v0.0.4 — 2026-03-06
 - **New:** Grok (`grok.com`) support — conversations are silently captured while you browse.

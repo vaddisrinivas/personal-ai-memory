@@ -49,6 +49,10 @@ function App() {
   const tk = getThemeTokens(theme)
   const { t } = useTranslation()
 
+  // Track popup open once on mount
+  useEffect(() => {
+  }, [])
+
   // Load initial record count + detect AI site
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

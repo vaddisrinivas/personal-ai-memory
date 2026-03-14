@@ -132,6 +132,9 @@ export class ChatGPTAdapter implements IAdapter {
       isPartial: false,
       isDeleted: false,
       isSuperseded: false,
+      // Mark as history snapshot so handleCaptureMessage can deduplicate
+      // against live SSE captures for the same session.
+      metadata: { fromHistory: true },
     }
 
     return [record]

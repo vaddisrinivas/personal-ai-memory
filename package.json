@@ -1,7 +1,7 @@
 {
   "name": "personal-ai-memory",
   "displayName": "Personal AI Memory",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Silent browser extension that captures web-based AI assistant conversations as private, searchable local memories.",
   "author": "Mars Wang",
   "scripts": {
@@ -19,7 +19,7 @@
     "dexie": "^4.0.10",
     "lucide-react": "^0.575.0",
     "minisearch": "^7.2.0",
-    "react": "^18.3.1",
+"react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {

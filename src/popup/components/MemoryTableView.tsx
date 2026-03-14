@@ -233,6 +233,14 @@ export function MemoryTableView({
     if (!searchQuery) setSearchCollapsed(new Set());
   }, [searchQuery]);
 
+  // Track searches with debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    const id = setTimeout(() => {
+    }, 800);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
   const toggleSession = useCallback(
     (sessionId: string, isSearching: boolean) => {
       if (isSearching) {
@@ -367,7 +375,93 @@ export function MemoryTableView({
     [onDeleted],
   );
 
-  const groups = groupBySessionId(records);
+  // Normalize Gemini sessions & dedupe ChatGPT partials before grouping.
+  //
+  // 1) Gemini: avoid duplicate "google:unknown" groupings.
+  //    If we have both a concrete Gemini session (google:<conversationId>) and
+  //    an "unknown" session with identical provider/role/content, we treat the
+  //    unknown record as belonging to the concrete session. Orphaned "unknown"
+  //    Gemini records with no concrete match are dropped from the UI.
+  //
+  // 2) ChatGPT: the interceptor can occasionally emit an early short assistant
+  //    reply followed by the full message (e.g. "Hey Mars" then
+  //    "Hey Mars 👋😄\n\nWhat's going on today?") for the same session. We
+  //    collapse these by keeping only the longest assistant message when
+  //    contents are prefix-related and timestamps are very close.
+  const normalizedRecords = React.useMemo(() => {
+    if (records.length === 0) return records;
+
+    const canonicalByContent = new Map<string, string>();
+
+    for (const r of records) {
+      if (r.provider === "google" && r.sessionId !== "google:unknown") {
+        const key = `${r.provider}:${r.role}:${r.content}`;
+        if (!canonicalByContent.has(key)) {
+          canonicalByContent.set(key, r.sessionId);
+        }
+      }
+    }
+
+    // If there's no known concrete Gemini session, keep records as-is.
+    if (canonicalByContent.size === 0) return records;
+
+    const remapped: MemoryRecord[] = [];
+    for (const r of records) {
+      if (r.provider === "google" && r.sessionId === "google:unknown") {
+        const key = `${r.provider}:${r.role}:${r.content}`;
+        const canonical = canonicalByContent.get(key);
+        if (canonical) {
+          remapped.push({ ...r, sessionId: canonical });
+        }
+        // If no canonical match exists, drop this "unknown" record from UI.
+      } else {
+        remapped.push(r);
+      }
+    }
+
+    // Dedupe ChatGPT partial assistant messages per session.
+    const bySession = groupBySessionId(remapped);
+    const WINDOW_MS = 10_000;
+    const cleaned: MemoryRecord[] = [];
+
+    for (const [sessionId, list] of bySession.entries()) {
+      if (!sessionId.startsWith("openai:") || list.length < 2) {
+        cleaned.push(...list);
+        continue;
+      }
+
+      const keepFlags = new Array(list.length).fill(true);
+
+      for (let i = 0; i < list.length; i++) {
+        const a = list[i];
+        if (a.provider !== "openai" || a.role !== "assistant") continue;
+
+        for (let j = i + 1; j < list.length; j++) {
+          const b = list[j];
+          if (b.provider !== "openai" || b.role !== "assistant") continue;
+          const dt = b.timestamp - a.timestamp;
+          if (dt < 0 || dt > WINDOW_MS) continue;
+
+          // If later content is a strict extension of the earlier one, drop the earlier.
+          if (
+            b.content.length > a.content.length &&
+            b.content.startsWith(a.content)
+          ) {
+            keepFlags[i] = false;
+            break;
+          }
+        }
+      }
+
+      for (let i = 0; i < list.length; i++) {
+        if (keepFlags[i]) cleaned.push(list[i]);
+      }
+    }
+
+    return cleaned;
+  }, [records]);
+
+  const groups = groupBySessionId(normalizedRecords);
 
   // Provider filter first, then sort
   const allSessionIds = Array.from(groups.keys())

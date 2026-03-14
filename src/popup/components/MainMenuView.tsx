@@ -93,7 +93,7 @@ export function MainMenuView({
               ? chrome.runtime.getURL('assets/icon.png')
               : ''
           }
-          alt="AI Memory"
+          alt="Personal AI Memory"
           width={36}
           height={36}
           style={{ display: 'block', borderRadius: 10, flexShrink: 0 }}
@@ -103,7 +103,7 @@ export function MainMenuView({
           }}
         />
         <div style={localStyles.headerText}>
-          <div style={{ ...localStyles.title, color: tk.text }}>AI Memory</div>
+          <div style={{ ...localStyles.title, color: tk.text }}>Personal AI Memory</div>
           <div style={{ fontSize: 12, letterSpacing: '-0.01em', color: tk.textMuted }}>{t.totalRecords(totalRecords)}</div>
         </div>
         <div style={localStyles.headerActions}>
@@ -148,7 +148,9 @@ export function MainMenuView({
       {isOnAISite && (
         <button
           style={{ ...S.menuBtn, backgroundColor: tk.btnPrimaryBg, borderColor: tk.btnPrimaryBg, color: '#fff' }}
-          onClick={onOpenPanel}
+          onClick={() => {
+            onOpenPanel?.()
+          }}
           type="button"
         >
           <span style={S.iconWrap}><ExternalLinkIcon /></span>
@@ -163,7 +165,9 @@ export function MainMenuView({
       {onOpenFolder && (
         <button
           style={{ ...S.menuBtn, backgroundColor: tk.btnBg, borderColor: tk.border, color: tk.text }}
-          onClick={onOpenFolder}
+          onClick={() => {
+            onOpenFolder()
+          }}
           type="button"
         >
           <span style={S.iconWrap}><FolderIcon /></span>

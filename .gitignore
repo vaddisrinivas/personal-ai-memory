@@ -40,3 +40,6 @@ docs/
 
 # Embedding models
 assets/models/
+
+# CDK
+lambda-proxy/
