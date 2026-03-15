@@ -26,7 +26,7 @@ interface GrokExport {
   conversations: GrokConversationEntry[]
 }
 
-function parseCreateTime(raw: GrokResponse['create_time']): number {
+export function parseCreateTime(raw: GrokResponse['create_time']): number {
   if (typeof raw === 'number') return raw
   if (typeof raw === 'string') return Date.parse(raw) || Date.now()
   if (raw && typeof raw === 'object' && '$date' in raw) {
