@@ -219,6 +219,11 @@ src/
 │   ├── db.ts                  IndexedDB (Dexie) 操作
 │   ├── embedding.ts           ONNX 模型名稱 / 版本常數
 │   ├── injector.ts            MAIN-world fetch/XHR 攔截器（注入頁面）
+│   ├── chunking.ts            文字分塊（500 字元區段、75 字元重疊）
+│   ├── domSync.ts             DOM 對話同步
+│   ├── offscreen.ts           Offscreen document 訊息處理
+│   ├── perplexityBgFetch.ts   Perplexity 背景擷取輔助
+│   ├── syncEmbeddings.ts      嵌入同步工具
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 解析器
 │       ├── claude.ts          Claude SSE 解析器
@@ -228,26 +233,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world 橋接 + <title> MutationObserver
 │   ├── memory-float-ui.tsx    浮動面板 content script 入口
-│   ├── chatgpt-injector.tsx   Recall 按鈕注入 + RAG prompt 組裝
+│   ├── chatgpt-injector.tsx   ChatGPT Recall 按鈕 + RAG prompt
+│   ├── claude-injector.tsx    Claude Recall 按鈕
 │   ├── gemini-injector.tsx    Gemini 被動捕捉 + Recall 按鈕
-│   └── grok-injector.tsx      Grok 被動捕捉
+│   ├── grok-injector.tsx      Grok Recall 按鈕
+│   └── perplexity-injector.tsx Perplexity Recall 按鈕
+├── importers/
+│   ├── base.ts                匯入器基底介面
+│   ├── chatgptConversations.ts ChatGPT JSON 匯入器
+│   ├── claudeConversations.ts  Claude JSON 匯入器
+│   ├── geminiTakeout.ts       Gemini Takeout 匯入器
+│   ├── grokConversations.ts   Grok JSON 匯入器
+│   └── index.ts               匯入器註冊
 ├── tabs/
 │   └── offscreen.tsx          ONNX 推論（Offscreen Document — 需要 DOM）
 ├── popup/
 │   ├── index.tsx              Popup 根元件 — 滑動面板導航
 │   └── components/
-│       ├── MainMenuView.tsx   主選單 + 常用 Prompt 區塊
+│       ├── FloatingMemoryPanel.tsx 可拖曳浮動面板（Logo + 面板）
+│       ├── MemoryMenuContent.tsx   記憶選單內容（側邊欄 / 快顯）
 │       ├── MemoryTableView.tsx 依會話分組的記憶列表
 │       ├── ImportView.tsx     JSON 匯入 UI
 │       ├── ExportView.tsx     JSON 匯出 UI
 │       ├── FavoritePromptsSection.tsx Trie 自動建議提示詞
 │       └── FolderView.tsx     拖曳資料夾管理
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx 可拖曳浮動面板（Logo + 面板）
+├── utils/
+│   ├── chrome-storage.ts      共用 chrome.storage.local 輔助（讀取/儲存/訂閱）
+│   ├── rag.ts                 RAG prompt 格式化
+│   ├── recall-button.ts       Recall 按鈕建立與注入
+│   ├── recall-helpers.ts      共用 Recall 工具
+│   ├── trie.ts                Trie 自動完成資料結構
+│   ├── message-passing.ts     型別安全的 Chrome 訊息傳遞
+│   └── onboarding-highlight.ts 入門步驟高亮輔助
 ├── i18n/
 │   ├── translations.ts        8 語言字串對照表
-│   ├── LanguageContext.tsx    語言切換（localStorage）
-│   └── ThemeContext.tsx       深色 / 淺色主題（localStorage）
+│   ├── LanguageContext.tsx    語言切換（chrome.storage — 跨分頁同步）
+│   ├── ThemeContext.tsx       深色 / 淺色主題（chrome.storage — 跨分頁同步）
+│   └── lang-storage.ts        語言持久化輔助
 └── types/
     ├── memory.ts              MemoryRecord · SearchResult 介面
     └── messages.ts            所有 Chrome 訊息型別定義
@@ -277,6 +299,17 @@ pnpm test:e2e          # E2E 測試（Playwright — 需先 build）
 ---
 
 ## 更新日誌
+
+### v0.0.6 — 2026-03-15
+- **修復：** 主題切換現在會即時同步到所有已開啟分頁 — 先前僅目前分頁會更新
+- **修復：** 語言切換現在會即時同步到所有已開啟分頁 — 先前需重新整理頁面才會生效
+- **修復：** 浮動面板狀態（開/關、當前檢視）現在在重新整理與站內導航後會保留 — 先前每次載入都會還原成浮動按鈕
+- **重構：** 以 MemoryMenuContent 取代 MainMenuView — 記憶選單內容改由獨立元件提供，側邊欄與快顯共用
+- **重構：** 將 FloatingMemoryPanel 自 `src/ui/memory-panel/` 移至 `src/popup/components/`，統一快顯 UI 結構
+- **重構：** 匯入器自 `src/popup/components/importers/` 移至 `src/importers/` 以理清分層
+- **重構：** 將共用 `chrome.storage` 工具（`loadFromChrome`、`saveToChrome`、`subscribeChromeStorage`）抽出至 `src/utils/chrome-storage.ts`，供主題與語言 context 使用
+- **重構：** 背景處理拆成獨立模組：`chunking.ts`、`domSync.ts`、`offscreen.ts`、`perplexityBgFetch.ts`
+- **重構：** RAG prompt 格式化與 Recall 邏輯抽出至 `src/utils/rag.ts`、`src/utils/recall-button.ts`、`src/utils/recall-helpers.ts`
 
 ### v0.0.5 — 2026-03-12
 - **修復：** Gemini 被動捕捉改用最新 DOM 選擇器（`<user-query>` / `<message-content>`）以適應 Gemini 介面更新 — 舊版選擇器已失效，導致對話靜默遺漏。

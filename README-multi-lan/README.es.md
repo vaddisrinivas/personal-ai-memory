@@ -220,6 +220,11 @@ src/
 │   ├── db.ts                  Operaciones IndexedDB (Dexie)
 │   ├── embedding.ts           Constantes de nombre / versión del modelo ONNX
 │   ├── injector.ts            Interceptor fetch/XHR MAIN-world (inyectado en la página)
+│   ├── chunking.ts            Fragmentación de texto (segmentos 500 chars, solapamiento 75)
+│   ├── domSync.ts             Sincronización de conversaciones basada en DOM
+│   ├── offscreen.ts           Manejador de mensajes del Offscreen document
+│   ├── perplexityBgFetch.ts  Ayuda de fetch en segundo plano para Perplexity
+│   ├── syncEmbeddings.ts      Utilidades de sincronización de embeddings
 │   └── adapters/
 │       ├── chatgpt.ts         Parser SSE delta-v1 de ChatGPT
 │       ├── claude.ts          Parser SSE de Claude
@@ -229,26 +234,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         Puente ISOLATED-world + MutationObserver <title>
 │   ├── memory-float-ui.tsx    Punto de entrada del content script del panel flotante
-│   ├── chatgpt-injector.tsx   Inyección del botón Recall + ensamblaje del prompt RAG
-│   ├── gemini-injector.tsx    Captura pasiva de Gemini + botón Recall
-│   └── grok-injector.tsx      Captura pasiva de Grok
+│   ├── chatgpt-injector.tsx   Botón Recall ChatGPT + prompt RAG
+│   ├── claude-injector.tsx    Botón Recall Claude
+│   ├── gemini-injector.tsx    Captura pasiva Gemini + botón Recall
+│   ├── grok-injector.tsx      Botón Recall Grok
+│   └── perplexity-injector.tsx Botón Recall Perplexity
+├── importers/
+│   ├── base.ts                Interfaz base del importador
+│   ├── chatgptConversations.ts Importador JSON ChatGPT
+│   ├── claudeConversations.ts  Importador JSON Claude
+│   ├── geminiTakeout.ts       Importador Gemini Takeout
+│   ├── grokConversations.ts   Importador JSON Grok
+│   └── index.ts               Registro de importadores
 ├── tabs/
 │   └── offscreen.tsx          Inferencia ONNX (Offscreen Document — requiere DOM)
 ├── popup/
 │   ├── index.tsx              Raíz del Popup — navegación por panel deslizante
 │   └── components/
-│       ├── MainMenuView.tsx   Menú principal + sección de Prompts favoritos
+│       ├── FloatingMemoryPanel.tsx Panel flotante arrastrable (logo + panel)
+│       ├── MemoryMenuContent.tsx   Contenido del menú de memoria (barra lateral / popup)
 │       ├── MemoryTableView.tsx Lista de memorias agrupadas por sesión
 │       ├── ImportView.tsx     UI de importación JSON
 │       ├── ExportView.tsx     UI de exportación JSON
 │       ├── FavoritePromptsSection.tsx Prompts con autocompletado Trie
 │       └── FolderView.tsx     Gestión de carpetas con drag-and-drop
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx Panel flotante arrastrable (logo + panel)
+├── utils/
+│   ├── chrome-storage.ts      Helpers chrome.storage.local compartidos (cargar/guardar/suscribir)
+│   ├── rag.ts                 Formateo de prompts RAG
+│   ├── recall-button.ts       Creación e inyección del botón Recall
+│   ├── recall-helpers.ts      Utilidades Recall compartidas
+│   ├── trie.ts                Estructura de datos Trie para autocompletado
+│   ├── message-passing.ts     Paso de mensajes Chrome con tipos seguros
+│   └── onboarding-highlight.ts Helpers de resaltado de pasos de onboarding
 ├── i18n/
 │   ├── translations.ts        Mapa de cadenas en 8 idiomas
-│   ├── LanguageContext.tsx    Cambio de idioma (localStorage)
-│   └── ThemeContext.tsx       Tema oscuro / claro (localStorage)
+│   ├── LanguageContext.tsx    Cambio de idioma (chrome.storage — sincroniza entre pestañas)
+│   ├── ThemeContext.tsx       Tema oscuro / claro (chrome.storage — sincroniza entre pestañas)
+│   └── lang-storage.ts        Helpers de persistencia de idioma
 └── types/
     ├── memory.ts              Interfaces MemoryRecord · SearchResult
     └── messages.ts            Todas las definiciones de tipos de mensajes Chrome
@@ -278,6 +300,17 @@ pnpm test:e2e          # Pruebas E2E (Playwright — ejecutar pnpm build primero
 ---
 
 ## Historial de cambios
+
+### v0.0.6 — 2026-03-15
+- **Corrección:** Los cambios de tema ahora se sincronizan al instante en todas las pestañas abiertas — antes solo se actualizaba la pestaña actual al cambiar modo claro/oscuro
+- **Corrección:** Los cambios de idioma ahora se sincronizan al instante en todas las pestañas abiertas — antes hacía falta recargar la página para aplicarlos
+- **Corrección:** El estado del panel flotante (abierto/cerrado, vista activa) ahora persiste tras recargar y navegar — antes se restablecía al botón flotante en cada carga
+- **Refactor:** Sustitución de MainMenuView por MemoryMenuContent — el contenido del menú de memoria pasa a un componente dedicado usado por barra lateral y popup
+- **Refactor:** FloatingMemoryPanel movido de `src/ui/memory-panel/` a `src/popup/components/` para un único árbol de UI del popup
+- **Refactor:** Importadores movidos de `src/popup/components/importers/` a `src/importers/` para separación más clara
+- **Refactor:** Utilidades compartidas de `chrome.storage` (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) extraídas a `src/utils/chrome-storage.ts` — usadas por contexto de tema e idioma
+- **Refactor:** Procesamiento en segundo plano extraído a módulos dedicados: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
+- **Refactor:** Formateo de prompts RAG y lógica Recall extraídos a `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`
 
 ### v0.0.5 — 2026-03-12
 - **Corrección:** La captura pasiva de Gemini ahora usa selectores DOM actualizados (`<user-query>` / `<message-content>`) compatibles con la interfaz actual de Gemini — las conversaciones se perdían silenciosamente tras una actualización del frontend.

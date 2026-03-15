@@ -259,14 +259,13 @@ src/
 ├── popup/
 │   ├── index.tsx              Popup root — sliding panel navigation
 │   └── components/
-│       ├── MainMenuView.tsx   Main menu + Favourite Prompts section
+│       ├── FloatingMemoryPanel.tsx Draggable floating panel (logo + panel)
+│       ├── MemoryMenuContent.tsx   Memory menu content (sidebar / popup)
 │       ├── MemoryTableView.tsx Memory list grouped by session
 │       ├── ImportView.tsx     JSON import UI
 │       ├── ExportView.tsx     JSON export UI
 │       ├── FavoritePromptsSection.tsx Trie autocomplete prompts
 │       └── FolderView.tsx     Drag-and-drop folder management
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx Draggable floating panel (logo + panel)
 ├── utils/
 │   ├── chrome-storage.ts      Shared chrome.storage.local helpers (load/save/subscribe)
 │   ├── rag.ts                 RAG prompt formatting
@@ -313,6 +312,8 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 - **Fix:** Theme changes now sync instantly across all open tabs — previously only the current tab updated when toggling dark/light mode
 - **Fix:** Language changes now sync instantly across all open tabs — previously required a page reload to take effect
 - **Fix:** Floating panel state (open/closed, active view) now persists across page reloads and site navigation — previously reset to the floating button on every page load
+- **Refactor:** Replaced MainMenuView with MemoryMenuContent — memory menu content now lives in a dedicated component used by both sidebar and popup
+- **Refactor:** Moved FloatingMemoryPanel from `src/ui/memory-panel/` to `src/popup/components/` for a single popup UI tree
 - **Refactor:** Moved importers from `src/popup/components/importers/` → `src/importers/` for cleaner separation
 - **Refactor:** Extracted shared `chrome.storage` utilities (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) into `src/utils/chrome-storage.ts` — used by both theme and language contexts
 - **Refactor:** Extracted background processing into dedicated modules: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`

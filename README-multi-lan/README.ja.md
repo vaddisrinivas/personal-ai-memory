@@ -220,6 +220,11 @@ src/
 │   ├── db.ts                  IndexedDB (Dexie) 操作
 │   ├── embedding.ts           ONNX モデル名 / バージョン定数
 │   ├── injector.ts            MAIN-world fetch/XHR インターセプター（ページに注入）
+│   ├── chunking.ts            テキストチャンキング（500 文字セグメント、75 文字オーバーラップ）
+│   ├── domSync.ts             DOM ベース会話同期
+│   ├── offscreen.ts           Offscreen document メッセージハンドラー
+│   ├── perplexityBgFetch.ts   Perplexity バックグラウンドフェッチ補助
+│   ├── syncEmbeddings.ts      埋め込み同期ユーティリティ
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 パーサー
 │       ├── claude.ts          Claude SSE パーサー
@@ -229,26 +234,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world ブリッジ + <title> MutationObserver
 │   ├── memory-float-ui.tsx    フローティングパネル content script エントリーポイント
-│   ├── chatgpt-injector.tsx   Recall ボタン注入 + RAG プロンプト組み立て
+│   ├── chatgpt-injector.tsx   ChatGPT Recall ボタン + RAG プロンプト
+│   ├── claude-injector.tsx    Claude Recall ボタン
 │   ├── gemini-injector.tsx    Gemini パッシブキャプチャ + Recall ボタン
-│   └── grok-injector.tsx      Grok パッシブキャプチャ
+│   ├── grok-injector.tsx      Grok Recall ボタン
+│   └── perplexity-injector.tsx Perplexity Recall ボタン
+├── importers/
+│   ├── base.ts                インポーター基底インターフェース
+│   ├── chatgptConversations.ts ChatGPT JSON インポーター
+│   ├── claudeConversations.ts  Claude JSON インポーター
+│   ├── geminiTakeout.ts       Gemini Takeout インポーター
+│   ├── grokConversations.ts   Grok JSON インポーター
+│   └── index.ts               インポーター登録
 ├── tabs/
 │   └── offscreen.tsx          ONNX 推論（Offscreen Document — DOM 必要）
 ├── popup/
 │   ├── index.tsx              Popup ルート — スライディングパネルナビゲーション
 │   └── components/
-│       ├── MainMenuView.tsx   メインメニュー + お気に入りプロンプトセクション
+│       ├── FloatingMemoryPanel.tsx ドラッグ可能フローティングパネル（ロゴ + パネル）
+│       ├── MemoryMenuContent.tsx   メモリメニューコンテンツ（サイドバー / ポップアップ）
 │       ├── MemoryTableView.tsx セッション別グループ化された記憶リスト
 │       ├── ImportView.tsx     JSON インポート UI
 │       ├── ExportView.tsx     JSON エクスポート UI
 │       ├── FavoritePromptsSection.tsx Trie オートコンプリートプロンプト
 │       └── FolderView.tsx     ドラッグ＆ドロップフォルダ管理
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx ドラッグ可能なフローティングパネル（ロゴ + パネル）
+├── utils/
+│   ├── chrome-storage.ts      共有 chrome.storage.local 補助（読込/保存/購読）
+│   ├── rag.ts                 RAG プロンプトフォーマット
+│   ├── recall-button.ts       Recall ボタン作成・注入
+│   ├── recall-helpers.ts      共有 Recall ユーティリティ
+│   ├── trie.ts                Trie オートコンプリート用データ構造
+│   ├── message-passing.ts     型安全 Chrome メッセージ受け渡し
+│   └── onboarding-highlight.ts オンボーディングハイライト補助
 ├── i18n/
 │   ├── translations.ts        8 言語文字列マップ
-│   ├── LanguageContext.tsx    言語切替（localStorage）
-│   └── ThemeContext.tsx       ダーク / ライトテーマ（localStorage）
+│   ├── LanguageContext.tsx    言語切替（chrome.storage — タブ間同期）
+│   ├── ThemeContext.tsx       ダーク / ライトテーマ（chrome.storage — タブ間同期）
+│   └── lang-storage.ts        言語永続化補助
 └── types/
     ├── memory.ts              MemoryRecord · SearchResult インターフェース
     └── messages.ts            すべての Chrome メッセージ型定義
@@ -277,6 +299,17 @@ pnpm test:e2e          # E2E テスト（Playwright — 事前にビルドが必
 ---
 
 ## 更新履歴
+
+### v0.0.6 — 2026-03-15
+- **修正：** テーマ切替が全開いているタブに即時同期 — 以前は現在のタブのみ更新されていた
+- **修正：** 言語切替が全開いているタブに即時同期 — 以前はページ再読み込みが必要だった
+- **修正：** フローティングパネルの状態（開閉・表示中ビュー）がページ再読み込み・サイト内遷移後も保持 — 以前は毎回フローティングボタンにリセットされていた
+- **リファクタ：** MainMenuView を MemoryMenuContent に置換 — メモリメニュー内容を専用コンポーネントに集約し、サイドバーとポップアップで共有
+- **リファクタ：** FloatingMemoryPanel を `src/ui/memory-panel/` から `src/popup/components/` へ移動し、ポップアップ UI を一つのツリーに統一
+- **リファクタ：** インポーターを `src/popup/components/importers/` から `src/importers/` へ移動して責務を分離
+- **リファクタ：** 共通 `chrome.storage` ユーティリティ（`loadFromChrome`、`saveToChrome`、`subscribeChromeStorage`）を `src/utils/chrome-storage.ts` に抽出 — テーマ・言語コンテキストで共有
+- **リファクタ：** バックグラウンド処理を専用モジュールに分割：`chunking.ts`、`domSync.ts`、`offscreen.ts`、`perplexityBgFetch.ts`
+- **リファクタ：** RAG プロンプト整形と Recall ロジックを `src/utils/rag.ts`、`src/utils/recall-button.ts`、`src/utils/recall-helpers.ts` に抽出
 
 ### v0.0.5 — 2026-03-12
 - **修正：** Gemini パッシブキャプチャが最新の DOM セレクター（`<user-query>` / `<message-content>`）を使用するよう更新 — Gemini フロントエンド更新後に会話がサイレントに欠落していた問題を解消。

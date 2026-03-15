@@ -4,7 +4,7 @@ import type { PlasmoCSConfig } from "plasmo";
 import {
   FloatingMemoryPanel,
   openMemoryPanelExternally,
-} from "../ui/memory-panel/FloatingMemoryPanel";
+} from "../popup/components/FloatingMemoryPanel";
 
 export const config: PlasmoCSConfig = {
   matches: [

@@ -219,6 +219,11 @@ src/
 │   ├── db.ts                  IndexedDB (Dexie) 작업
 │   ├── embedding.ts           ONNX 모델명 / 버전 상수
 │   ├── injector.ts            MAIN-world fetch/XHR 인터셉터 (페이지에 주입)
+│   ├── chunking.ts            텍스트 청킹 (500자 세그먼트, 75자 오버랩)
+│   ├── domSync.ts             DOM 기반 대화 동기화
+│   ├── offscreen.ts           Offscreen document 메시지 핸들러
+│   ├── perplexityBgFetch.ts   Perplexity 백그라운드 페치 헬퍼
+│   ├── syncEmbeddings.ts      임베딩 동기화 유틸리티
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 파서
 │       ├── claude.ts          Claude SSE 파서
@@ -228,26 +233,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world 브릿지 + <title> MutationObserver
 │   ├── memory-float-ui.tsx    플로팅 패널 content script 진입점
-│   ├── chatgpt-injector.tsx   Recall 버튼 주입 + RAG 프롬프트 조립
+│   ├── chatgpt-injector.tsx   ChatGPT Recall 버튼 + RAG 프롬프트
+│   ├── claude-injector.tsx    Claude Recall 버튼
 │   ├── gemini-injector.tsx    Gemini 패시브 캡처 + Recall 버튼
-│   └── grok-injector.tsx      Grok 패시브 캡처
+│   ├── grok-injector.tsx      Grok Recall 버튼
+│   └── perplexity-injector.tsx Perplexity Recall 버튼
+├── importers/
+│   ├── base.ts                임포터 기본 인터페이스
+│   ├── chatgptConversations.ts ChatGPT JSON 임포터
+│   ├── claudeConversations.ts  Claude JSON 임포터
+│   ├── geminiTakeout.ts       Gemini Takeout 임포터
+│   ├── grokConversations.ts   Grok JSON 임포터
+│   └── index.ts               임포터 등록
 ├── tabs/
-│   └── offscreen.tsx          ONNX 추론 (Offscreen Document)
+│   └── offscreen.tsx          ONNX 추론 (Offscreen Document — DOM 필요)
 ├── popup/
 │   ├── index.tsx              Popup 루트 — 슬라이딩 패널 네비게이션
 │   └── components/
-│       ├── MainMenuView.tsx   메인 메뉴 + 즐겨찾기 프롬프트 섹션
+│       ├── FloatingMemoryPanel.tsx 드래그 가능 플로팅 패널 (로고 + 패널)
+│       ├── MemoryMenuContent.tsx   메모리 메뉴 콘텐츠 (사이드바 / 팝업)
 │       ├── MemoryTableView.tsx 세션별 그룹화된 메모리 목록
 │       ├── ImportView.tsx     JSON 가져오기 UI
 │       ├── ExportView.tsx     JSON 내보내기 UI
 │       ├── FavoritePromptsSection.tsx Trie 자동완성 프롬프트
 │       └── FolderView.tsx     드래그 앤 드롭 폴더 관리
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx 드래그 가능한 플로팅 패널 (로고 + 패널)
+├── utils/
+│   ├── chrome-storage.ts      공유 chrome.storage.local 헬퍼 (로드/저장/구독)
+│   ├── rag.ts                 RAG 프롬프트 포맷팅
+│   ├── recall-button.ts       Recall 버튼 생성 및 주입
+│   ├── recall-helpers.ts      공유 Recall 유틸리티
+│   ├── trie.ts                Trie 자동완성 데이터 구조
+│   ├── message-passing.ts     타입 안전 Chrome 메시지 전달
+│   └── onboarding-highlight.ts 온보딩 단계 하이라이트 헬퍼
 ├── i18n/
 │   ├── translations.ts        8개 언어 문자열 맵
-│   ├── LanguageContext.tsx    언어 전환 (localStorage)
-│   └── ThemeContext.tsx       다크 / 라이트 테마 (localStorage)
+│   ├── LanguageContext.tsx    언어 전환 (chrome.storage — 탭 간 동기화)
+│   ├── ThemeContext.tsx       다크 / 라이트 테마 (chrome.storage — 탭 간 동기화)
+│   └── lang-storage.ts        언어 지속성 헬퍼
 └── types/
     ├── memory.ts              MemoryRecord · SearchResult 인터페이스
     └── messages.ts            모든 Chrome 메시지 타입 정의
@@ -276,6 +298,17 @@ pnpm test:e2e          # E2E 테스트 (Playwright — 빌드 필요)
 ---
 
 ## 업데이트 내역
+
+### v0.0.6 — 2026-03-15
+- **수정:** 테마 전환이 열린 모든 탭에 즉시 동기화 — 이전에는 현재 탭만 갱신됨
+- **수정:** 언어 전환이 열린 모든 탭에 즉시 동기화 — 이전에는 페이지 새로고침이 필요했음
+- **수정:** 플로팅 패널 상태(열림/닫힘, 활성 뷰)가 페이지 새로고침 및 사이트 내 이동 후에도 유지 — 이전에는 매번 플로팅 버튼으로 초기화됨
+- **리팩터:** MainMenuView를 MemoryMenuContent로 대체 — 메모리 메뉴 콘텐츠를 전용 컴포넌트로 두고 사이드바와 팝업에서 공유
+- **리팩터:** FloatingMemoryPanel을 `src/ui/memory-panel/`에서 `src/popup/components/`로 이동하여 팝업 UI 트리 통일
+- **리팩터:** 임포터를 `src/popup/components/importers/`에서 `src/importers/`로 이동하여 구조 분리
+- **리팩터:** 공유 `chrome.storage` 유틸리티(`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`)를 `src/utils/chrome-storage.ts`로 추출 — 테마·언어 컨텍스트에서 사용
+- **리팩터:** 백그라운드 처리를 전용 모듈로 분리: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
+- **리팩터:** RAG 프롬프트 포맷 및 Recall 로직을 `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`로 추출
 
 ### v0.0.5 — 2026-03-12
 - **수정:** Gemini 패시브 캡처가 최신 DOM 선택자(`<user-query>` / `<message-content>`)를 사용하도록 업데이트 — Gemini 프런트엔드 업데이트 이후 대화가 조용히 누락되던 문제 해결.

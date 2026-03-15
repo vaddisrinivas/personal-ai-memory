@@ -40,50 +40,98 @@ function getInputText(): string {
 // Most reliable approach: simulate a clipboard paste event, which Lexical intercepts
 // and uses to set its internal state correctly.
 
+// Build a minimal Lexical editor-state JSON for plain multi-line text.
+// Each "\n"-separated line becomes its own paragraph node.
+function buildLexicalEditorState(text: string): string {
+  const paragraphs = text.split("\n").map((line) => ({
+    children: line
+      ? [
+          {
+            detail: 0,
+            format: 0,
+            mode: "normal",
+            style: "",
+            text: line,
+            type: "text",
+            version: 1,
+          },
+        ]
+      : [],
+    direction: line ? "ltr" : null,
+    format: "",
+    indent: 0,
+    type: "paragraph",
+    version: 1,
+  }));
+
+  return JSON.stringify({
+    root: {
+      children: paragraphs,
+      direction: "ltr",
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1,
+    },
+  });
+}
+
 function injectText(text: string): void {
-  const editor = document.querySelector<HTMLElement>(
+  const editorEl = document.querySelector<HTMLElement>(
     'div[contenteditable="true"][data-lexical-editor], div[contenteditable="true"][aria-placeholder]',
   );
-  if (!editor) {
+  if (!editorEl) {
     console.warn("[AI Memory] Could not find Lexical editor element");
     return;
   }
 
-  editor.focus();
+  // Primary: access Lexical's internal editor instance (stored as __lexicalEditor
+  // on the root element) and set its state directly. This is the only reliable
+  // way to replace content without keyboard/execCommand hacks, since Lexical's
+  // paste handler inserts at internal cursor position rather than the DOM selection.
+  type LexicalEditorLike = {
+    parseEditorState: (json: string) => unknown;
+    setEditorState: (state: unknown) => void;
+  };
+  const lexicalEditor = (editorEl as unknown as Record<string, unknown>)[
+    "__lexicalEditor"
+  ] as LexicalEditorLike | undefined;
 
-  // Select all existing content first
-  const selection = window.getSelection();
-  if (selection) {
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    selection.removeAllRanges();
-    selection.addRange(range);
+  if (lexicalEditor?.parseEditorState && lexicalEditor?.setEditorState) {
+    try {
+      const newState = lexicalEditor.parseEditorState(
+        buildLexicalEditorState(text),
+      );
+      lexicalEditor.setEditorState(newState);
+      // Fire an input event so Perplexity's React layer picks up the change
+      // and activates the submit button.
+      editorEl.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    } catch {
+      // fall through to paste fallback
+    }
   }
 
-  // Simulate a paste event with the text — Lexical listens for this and
-  // updates its internal state, which also triggers React's onChange chain.
+  // Fallback: sync DOM selection into Lexical's internal selection via
+  // selectionchange, then paste — Lexical replaces the selection.
+  editorEl.focus();
+  const sel = window.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(editorEl);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  document.dispatchEvent(new Event("selectionchange"));
+
   const dt = new DataTransfer();
   dt.setData("text/plain", text);
-
   const pasteEvent = new ClipboardEvent("paste", {
     bubbles: true,
     cancelable: true,
     clipboardData: dt,
   });
-
-  editor.dispatchEvent(pasteEvent);
-
-  // If paste was handled (default not prevented), Lexical has updated itself.
-  // If it was NOT handled (some Perplexity builds block paste), fall back to
-  // execCommand which at minimum works in Chrome for simple cases.
-  if (!pasteEvent.defaultPrevented) {
-    // Lexical handled it — nothing more to do
-    return;
-  }
-
-  // execCommand fallback
-  document.execCommand("selectAll", false, undefined);
-  document.execCommand("insertText", false, text);
+  editorEl.dispatchEvent(pasteEvent);
 }
 
 // ─── Button Creation ──────────────────────────────────────────────────────────

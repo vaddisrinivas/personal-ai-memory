@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { loadFromChrome, saveToChrome } from "../../utils/chrome-storage";
-import { MemoryTableView } from "../../popup/components/MemoryTableView";
-import { ImportView } from "../../popup/components/ImportView";
-import { ExportView } from "../../popup/components/ExportView";
-import { FavoritePromptsSection } from "../../popup/components/FavoritePromptsSection";
-import { FolderView } from "../../popup/components/FolderView";
-import { SettingsView } from "../../popup/components/SettingsView";
+import { MemoryTableView } from "./MemoryTableView";
+import { FolderView } from "./FolderView";
+import { SettingsView } from "./SettingsView";
+import { MemoryMenuContent } from "./MemoryMenuContent";
 import { LanguageProvider, useTranslation } from "../../i18n/LanguageContext";
 import { ThemeProvider, useTheme } from "../../i18n/ThemeContext";
 import { getThemeTokens } from "../../ui/theme";
@@ -41,41 +39,6 @@ const MoonIcon = () => (
     strokeLinejoin="round"
   >
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-  </svg>
-);
-
-const FolderIcon = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-  </svg>
-);
-
-const ListIcon = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="8" y1="6" x2="21" y2="6" />
-    <line x1="8" y1="12" x2="21" y2="12" />
-    <line x1="8" y1="18" x2="21" y2="18" />
-    <line x1="3" y1="6" x2="3.01" y2="6" />
-    <line x1="3" y1="12" x2="3.01" y2="12" />
-    <line x1="3" y1="18" x2="3.01" y2="18" />
   </svg>
 );
 
@@ -190,7 +153,6 @@ function useEscape(panelOpen: boolean, onClose: () => void) {
 
 // ── Inner Component ────────────────────────────────────────────────────────────
 
-// Inject theme transition CSS once on mount
 function useThemeTransitionStyle() {
   useEffect(() => {
     const id = "aim-theme-transition-style";
@@ -527,8 +489,12 @@ function FloatingMemoryPanelInner() {
       {/* Panel: draggable overlay */}
       {panelOpen &&
         (() => {
-          const defaultPos = getDefaultPanelPosition();
-          const pos = panelPos ?? defaultPos;
+          const pos = panelPos ?? clampPanelPosition(
+            window.innerWidth - MARGIN - panelMaxWidth,
+            window.innerHeight - MARGIN - panelMaxHeight,
+            panelMaxWidth,
+            panelMaxHeight,
+          );
           return (
             <div
               ref={panelRef}
@@ -758,48 +724,11 @@ function FloatingMemoryPanelInner() {
                         gap: 10,
                       }}
                     >
-                      <FavoritePromptsSection />
-                      <button
-                        type="button"
-                        style={{
-                          ...panelMenuBtn,
-                          backgroundColor: tk.btnBg,
-                          borderColor: tk.border,
-                          color: tk.text,
-                        }}
-                        onClick={() => {
-                          setPanelView("folder");
-                        }}
-                      >
-                        <span style={panelMenuIconWrap}>
-                          <FolderIcon />
-                        </span>
-                        <span>{t.promptsFolder}</span>
-                      </button>
-                      <div
-                        style={{
-                          height: 1,
-                          backgroundColor: tk.separator,
-                          margin: "2px 0",
-                        }}
+                      <MemoryMenuContent
+                        onOpenMemory={() => setPanelView("memory")}
+                        onOpenFolder={() => setPanelView("folder")}
+                        onImported={refreshData}
                       />
-                      <button
-                        type="button"
-                        style={{
-                          ...panelMenuBtn,
-                          backgroundColor: tk.btnBg,
-                          borderColor: tk.border,
-                          color: tk.text,
-                        }}
-                        onClick={() => setPanelView("memory")}
-                      >
-                        <span style={panelMenuIconWrap}>
-                          <ListIcon />
-                        </span>
-                        <span>{t.viewMemories}</span>
-                      </button>
-                      <ImportView onImported={refreshData} />
-                      <ExportView />
                     </div>
                   </div>
 
@@ -875,28 +804,3 @@ export function FloatingMemoryPanel() {
     </LanguageProvider>
   );
 }
-
-const panelMenuBtn: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  width: "100%",
-  padding: "13px 16px",
-  border: "1px solid",
-  borderRadius: 14,
-  fontSize: 14,
-  fontWeight: 500,
-  cursor: "pointer",
-  textAlign: "left",
-  boxSizing: "border-box",
-  transition: "opacity 0.12s ease",
-  fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-  letterSpacing: "-0.01em",
-};
-
-const panelMenuIconWrap: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  flexShrink: 0,
-  opacity: 0.8,
-};

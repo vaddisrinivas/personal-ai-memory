@@ -239,6 +239,11 @@ src/
 │   ├── db.ts                  IndexedDB (Dexie) operations
 │   ├── embedding.ts           ONNX model name / version constants
 │   ├── injector.ts            MAIN-world fetch/XHR interceptor (injected into page)
+│   ├── chunking.ts            Text chunking (500-char segments, 75-char overlap)
+│   ├── domSync.ts             DOM-based conversation sync
+│   ├── offscreen.ts           Offscreen document message handler
+│   ├── perplexityBgFetch.ts   Perplexity background fetch helper
+│   ├── syncEmbeddings.ts      Embedding sync utilities
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1 parser
 │       ├── claude.ts          Claude SSE parser
@@ -248,26 +253,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world bridge + <title> MutationObserver
 │   ├── memory-float-ui.tsx    Floating panel content script entry point
-│   ├── chatgpt-injector.tsx   Recall button injection + RAG prompt assembly
+│   ├── chatgpt-injector.tsx   ChatGPT Recall button + RAG prompt
+│   ├── claude-injector.tsx    Claude Recall button
 │   ├── gemini-injector.tsx    Gemini passive capture + Recall button
-│   └── grok-injector.tsx      Grok passive capture
+│   ├── grok-injector.tsx      Grok Recall button
+│   └── perplexity-injector.tsx Perplexity Recall button
+├── importers/
+│   ├── base.ts                Base importer interface
+│   ├── chatgptConversations.ts ChatGPT JSON importer
+│   ├── claudeConversations.ts  Claude JSON importer
+│   ├── geminiTakeout.ts       Gemini Takeout importer
+│   ├── grokConversations.ts   Grok JSON importer
+│   └── index.ts               Importer registry
 ├── tabs/
 │   └── offscreen.tsx          ONNX inference (Offscreen Document — needs DOM)
 ├── popup/
 │   ├── index.tsx              Popup root — sliding panel navigation
 │   └── components/
-│       ├── MainMenuView.tsx   Main menu + Favourite Prompts section
+│       ├── FloatingMemoryPanel.tsx Draggable floating panel (logo + panel)
+│       ├── MemoryMenuContent.tsx   Memory menu content (sidebar / popup)
 │       ├── MemoryTableView.tsx Memory list grouped by session
 │       ├── ImportView.tsx     JSON import UI
 │       ├── ExportView.tsx     JSON export UI
 │       ├── FavoritePromptsSection.tsx Trie autocomplete prompts
 │       └── FolderView.tsx     Drag-and-drop folder management
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx Draggable floating panel (logo + panel)
+├── utils/
+│   ├── chrome-storage.ts      Shared chrome.storage.local helpers (load/save/subscribe)
+│   ├── rag.ts                 RAG prompt formatting
+│   ├── recall-button.ts       Recall button creation and injection
+│   ├── recall-helpers.ts      Shared recall utilities
+│   ├── trie.ts                Trie data structure for autocomplete
+│   ├── message-passing.ts     Type-safe Chrome message passing
+│   └── onboarding-highlight.ts Onboarding step highlight helpers
 ├── i18n/
 │   ├── translations.ts        8-language string map
-│   ├── LanguageContext.tsx    Language switching (localStorage)
-│   └── ThemeContext.tsx       Dark / light theme (localStorage)
+│   ├── LanguageContext.tsx    Language switching (chrome.storage — syncs across tabs)
+│   ├── ThemeContext.tsx       Dark / light theme (chrome.storage — syncs across tabs)
+│   └── lang-storage.ts        Language persistence helpers
 └── types/
     ├── memory.ts              MemoryRecord · SearchResult interfaces
     └── messages.ts            All Chrome message type definitions
@@ -297,6 +319,17 @@ pnpm test:e2e          # E2E tests (Playwright — run pnpm build first)
 ---
 
 ## Changelog
+
+### v0.0.6 — 2026-03-15
+- **Fix:** Theme changes now sync instantly across all open tabs — previously only the current tab updated when toggling dark/light mode
+- **Fix:** Language changes now sync instantly across all open tabs — previously required a page reload to take effect
+- **Fix:** Floating panel state (open/closed, active view) now persists across page reloads and site navigation — previously reset to the floating button on every page load
+- **Refactor:** Replaced MainMenuView with MemoryMenuContent — memory menu content now lives in a dedicated component used by both sidebar and popup
+- **Refactor:** Moved FloatingMemoryPanel from `src/ui/memory-panel/` to `src/popup/components/` for a single popup UI tree
+- **Refactor:** Moved importers from `src/popup/components/importers/` → `src/importers/` for cleaner separation
+- **Refactor:** Extracted shared `chrome.storage` utilities (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) into `src/utils/chrome-storage.ts` — used by both theme and language contexts
+- **Refactor:** Extracted background processing into dedicated modules: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
+- **Refactor:** Extracted RAG prompt formatting and recall logic into `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`
 
 ### v0.0.5 — 2026-03-12
 - **Fix:** Gemini passive capture now uses updated DOM selectors (`<user-query>` / `<message-content>`) matching the current Gemini UI — conversations were silently missed after a Gemini front-end update.

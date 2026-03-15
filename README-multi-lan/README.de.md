@@ -222,6 +222,11 @@ src/
 │   ├── db.ts                  IndexedDB (Dexie)-Operationen
 │   ├── embedding.ts           ONNX-Modellname / -Versionskonstanten
 │   ├── injector.ts            MAIN-world fetch/XHR-Interceptor (in Seite injiziert)
+│   ├── chunking.ts            Text-Chunking (500-Zeichen-Segmente, 75-Zeichen-Überlappung)
+│   ├── domSync.ts             DOM-basierte Konversationssynchronisation
+│   ├── offscreen.ts           Offscreen-Document-Nachrichtenhandler
+│   ├── perplexityBgFetch.ts   Perplexity-Hintergrund-Fetch-Helfer
+│   ├── syncEmbeddings.ts      Embedding-Sync-Utilities
 │   └── adapters/
 │       ├── chatgpt.ts         ChatGPT SSE delta-v1-Parser
 │       ├── claude.ts          Claude SSE-Parser
@@ -231,26 +236,43 @@ src/
 ├── contents/
 │   ├── interceptor.ts         ISOLATED-world-Brücke + <title> MutationObserver
 │   ├── memory-float-ui.tsx    Content-Script-Einstiegspunkt des schwebenden Panels
-│   ├── chatgpt-injector.tsx   Recall-Button-Injektion + RAG-Prompt-Zusammenbau
+│   ├── chatgpt-injector.tsx   ChatGPT Recall-Button + RAG-Prompt
+│   ├── claude-injector.tsx    Claude Recall-Button
 │   ├── gemini-injector.tsx    Gemini passive Erfassung + Recall-Button
-│   └── grok-injector.tsx      Grok passive Erfassung
+│   ├── grok-injector.tsx      Grok Recall-Button
+│   └── perplexity-injector.tsx Perplexity Recall-Button
+├── importers/
+│   ├── base.ts                Basis-Importer-Interface
+│   ├── chatgptConversations.ts ChatGPT-JSON-Importer
+│   ├── claudeConversations.ts  Claude-JSON-Importer
+│   ├── geminiTakeout.ts       Gemini-Takeout-Importer
+│   ├── grokConversations.ts   Grok-JSON-Importer
+│   └── index.ts               Importer-Registry
 ├── tabs/
 │   └── offscreen.tsx          ONNX-Inferenz (Offscreen Document — benötigt DOM)
 ├── popup/
 │   ├── index.tsx              Popup-Wurzel — Schiebepanel-Navigation
 │   └── components/
-│       ├── MainMenuView.tsx   Hauptmenü + Lieblingsaufforderungen-Abschnitt
+│       ├── FloatingMemoryPanel.tsx Verschiebbares schwebendes Panel (Logo + Panel)
+│       ├── MemoryMenuContent.tsx   Speichermenü-Inhalt (Seitenleiste / Popup)
 │       ├── MemoryTableView.tsx Nach Session gruppierte Erinnerungsliste
 │       ├── ImportView.tsx     JSON-Import-UI
 │       ├── ExportView.tsx     JSON-Export-UI
 │       ├── FavoritePromptsSection.tsx Trie-Autovervollständigungs-Prompts
 │       └── FolderView.tsx     Drag-&-Drop-Ordnerverwaltung
-├── ui/memory-panel/
-│   └── FloatingMemoryPanel.tsx Verschiebbares schwebendes Panel (Logo + Panel)
+├── utils/
+│   ├── chrome-storage.ts      Gemeinsame chrome.storage.local-Helfer (Laden/Speichern/Abonnieren)
+│   ├── rag.ts                 RAG-Prompt-Formatierung
+│   ├── recall-button.ts       Recall-Button-Erstellung und -Injektion
+│   ├── recall-helpers.ts      Gemeinsame Recall-Utilities
+│   ├── trie.ts                Trie-Datenstruktur für Autovervollständigung
+│   ├── message-passing.ts     Typsichere Chrome-Nachrichtenübergabe
+│   └── onboarding-highlight.ts Onboarding-Schritt-Highlight-Helfer
 ├── i18n/
 │   ├── translations.ts        8-Sprachen-Zeichenkettenkarte
-│   ├── LanguageContext.tsx    Sprachwechsel (localStorage)
-│   └── ThemeContext.tsx       Dunkel- / Hellmodus (localStorage)
+│   ├── LanguageContext.tsx    Sprachwechsel (chrome.storage — Tab-übergreifend synchron)
+│   ├── ThemeContext.tsx       Dunkel- / Hellmodus (chrome.storage — Tab-übergreifend synchron)
+│   └── lang-storage.ts        Sprach-Persistenz-Helfer
 └── types/
     ├── memory.ts              MemoryRecord · SearchResult-Schnittstellen
     └── messages.ts            Alle Chrome-Nachrichtentyp-Definitionen
@@ -279,6 +301,17 @@ pnpm test:e2e          # E2E-Tests (Playwright — erst pnpm build ausführen)
 ---
 
 ## Änderungsprotokoll
+
+### v0.0.6 — 2026-03-15
+- **Fix:** Themenänderungen werden sofort in allen geöffneten Tabs synchronisiert — zuvor wurde nur der aktive Tab beim Umschalten von Hell/Dunkel aktualisiert
+- **Fix:** Sprachänderungen werden sofort in allen geöffneten Tabs synchronisiert — zuvor war ein Neuladen der Seite nötig
+- **Fix:** Der Zustand des schwebenden Panels (offen/geschlossen, aktive Ansicht) bleibt nach Neuladen und Navigation erhalten — zuvor wurde bei jedem Laden auf den Schwebebutton zurückgesetzt
+- **Refactor:** MainMenuView durch MemoryMenuContent ersetzt — Menüinhalt liegt nun in einer eigenen Komponente, genutzt von Sidebar und Popup
+- **Refactor:** FloatingMemoryPanel von `src/ui/memory-panel/` nach `src/popup/components/` verschoben für einen einheitlichen Popup-UI-Baum
+- **Refactor:** Importe von `src/popup/components/importers/` nach `src/importers/` verschoben zur klareren Trennung
+- **Refactor:** Gemeinsame `chrome.storage`-Hilfen (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) nach `src/utils/chrome-storage.ts` ausgelagert — von Theme- und Sprachkontext genutzt
+- **Refactor:** Hintergrundverarbeitung in eigene Module ausgelagert: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
+- **Refactor:** RAG-Prompt-Formatierung und Recall-Logik nach `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts` ausgelagert
 
 ### v0.0.5 — 2026-03-12
 - **Behoben:** Gemini Passiv-Erfassung verwendet jetzt aktualisierte DOM-Selektoren (`<user-query>` / `<message-content>`) passend zur aktuellen Gemini-Oberfläche — Gespräche wurden nach einem Gemini-Frontend-Update stillschweigend verpasst.
