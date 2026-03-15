@@ -73,7 +73,7 @@ function findAdapter(url: string): IAdapter | undefined {
 const CHUNK_SIZE_CHARS = 500; // ~100-125 tokens for mixed Chinese/English
 const CHUNK_OVERLAP_CHARS = 75; // ~15% overlap to avoid cutting mid-sentence
 
-function chunkText(text: string): string[] {
+export function chunkText(text: string): string[] {
   if (text.length <= CHUNK_SIZE_CHARS) return [text];
 
   const chunks: string[] = [];
@@ -90,7 +90,7 @@ function chunkText(text: string): string[] {
  * Short content (≤ CHUNK_SIZE_CHARS) is returned as-is (no extra fields).
  * Long content is split; each chunk gets a unique id, chunkIndex, and parentId.
  */
-function expandToChunks(record: MemoryRecord): MemoryRecord[] {
+export function expandToChunks(record: MemoryRecord): MemoryRecord[] {
   const chunks = chunkText(record.content);
   if (chunks.length === 1) return [record];
 
