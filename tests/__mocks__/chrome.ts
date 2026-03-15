@@ -8,6 +8,28 @@ let _lastError: { message: string } | undefined = undefined
 let _storageOnChangedListeners: Listener[] = []
 
 export const chromeMock = {
+  tabs: {
+    onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+    query: vi.fn(),
+    create: vi.fn(),
+  },
+  action: {
+    onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
+  },
+  offscreen: {
+    createDocument: vi.fn(),
+  },
+  scripting: {
+    executeScript: vi.fn(),
+  },
+  contextMenus: {
+    create: vi.fn(),
+    onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
+  },
+  alarms: {
+    create: vi.fn(),
+    onAlarm: { addListener: vi.fn(), removeListener: vi.fn() },
+  },
   runtime: {
     sendMessage: vi.fn(
       (
@@ -32,6 +54,10 @@ export const chromeMock = {
       addListener: vi.fn(),
       removeListener: vi.fn(),
     },
+    onInstalled: { addListener: vi.fn(), removeListener: vi.fn() },
+    onStartup: { addListener: vi.fn(), removeListener: vi.fn() },
+    getURL: vi.fn((path: string) => `chrome-extension://test-extension-id/${path}`),
+    getContexts: vi.fn(() => Promise.resolve([])),
   },
   storage: {
     local: {
