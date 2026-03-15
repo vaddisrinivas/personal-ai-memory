@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { LangCode, Translations } from './translations'
 import { LANG_NAMES, translations } from './translations'
-import { detectDefaultLang, loadLangFromChrome, readLangFromLocalStorage, writeLangToLocalStorage, saveLangToChrome } from './lang-storage'
+import { subscribeChromeStorage } from '../utils/chrome-storage'
+import { detectDefaultLang, LANG_STORAGE_KEY, loadLangFromChrome, readLangFromLocalStorage, writeLangToLocalStorage, saveLangToChrome } from './lang-storage'
 
 interface LanguageContextValue {
   lang: LangCode
@@ -43,8 +44,17 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       }
     })()
 
+    // Keep in sync when another context (popup, other tab) changes the language
+    const isValidLang = (v: unknown): v is LangCode =>
+      typeof v === 'string' && (ALL_LANGS as string[]).includes(v)
+    const unsub = subscribeChromeStorage(LANG_STORAGE_KEY, isValidLang, (next) => {
+      setLangState(next)
+      writeLangToLocalStorage(next)
+    })
+
     return () => {
       cancelled = true
+      unsub()
     }
   }, [])
 

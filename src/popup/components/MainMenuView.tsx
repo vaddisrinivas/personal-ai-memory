@@ -8,7 +8,7 @@ import { getThemeTokens } from '../../ui/theme'
 import { SunIcon, MoonIcon, GearIcon, ExternalLinkIcon, FolderIcon, ListIcon, DownloadIcon } from '../../ui/icons'
 import * as S from '../../ui/styles'
 import type { LangCode } from '../../i18n/translations'
-import { parseClaudeConversations } from './importers/claudeConversations'
+import { parseClaudeConversations } from '../../importers/claudeConversations'
 import type { SerializableMemoryRecord } from '../../types/memory'
 import type { ImportMemoriesResponse } from '../../types/messages'
 
@@ -103,7 +103,7 @@ export function MainMenuView({
           }}
         />
         <div style={localStyles.headerText}>
-          <div style={{ ...localStyles.title, color: tk.text }}>Personal AI Memory</div>
+          <div style={{ ...localStyles.title, color: tk.text }}>AI Memory</div>
           <div style={{ fontSize: 12, letterSpacing: '-0.01em', color: tk.textMuted }}>{t.totalRecords(totalRecords)}</div>
         </div>
         <div style={localStyles.headerActions}>

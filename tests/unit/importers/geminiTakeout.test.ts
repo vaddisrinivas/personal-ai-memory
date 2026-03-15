@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stripHtml, parseGeminiTakeout } from '../../../src/popup/components/importers/geminiTakeout'
+import { stripHtml, parseGeminiTakeout } from '../../../src/importers/geminiTakeout'
 
 describe('stripHtml — tag replacement', () => {
   it('converts <br> to newline', () => {

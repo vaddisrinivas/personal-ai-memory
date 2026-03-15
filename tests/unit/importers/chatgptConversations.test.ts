@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseChatGPTConversations } from '../../../src/popup/components/importers/chatgptConversations'
+import { parseChatGPTConversations } from '../../../src/importers/chatgptConversations'
 
 const baseConv = {
   id: 'conv-1',

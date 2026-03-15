@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCreateTime, parseGrokConversations } from '../../../src/popup/components/importers/grokConversations'
+import { parseCreateTime, parseGrokConversations } from '../../../src/importers/grokConversations'
 
 describe('parseCreateTime', () => {
   it('returns a number as-is', () => {

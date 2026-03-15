@@ -12,14 +12,9 @@
  */
 
 import type { PlasmoCSConfig } from "plasmo";
-import type { SearchMemoriesResponse } from "../types/messages";
-import { getRecallMessagesForContentScript } from "../i18n/recall-messages";
-import {
-  RECALL_BUTTON_STYLE,
-  RECALL_INPUT_STYLE,
-  RECALL_WRAPPER_STYLE,
-} from "./recall-styles";
-import { stopOnboardingHighlight, watchOnboardingStep3 } from "../utils/onboarding-highlight"
+import { watchOnboardingStep3 } from "../utils/onboarding-highlight";
+import { handleRecallClick as sharedHandleRecallClick } from "../utils/recall-helpers";
+import { createRecallButton as sharedCreateRecallButton } from "../utils/recall-button";
 
 export const config: PlasmoCSConfig = {
   matches: ["https://www.perplexity.ai/*"],
@@ -27,7 +22,6 @@ export const config: PlasmoCSConfig = {
 
 const BUTTON_ID = "ai-memory-perplexity-recall-btn";
 const INPUT_ID = "ai-memory-perplexity-recall-topk";
-const STORAGE_KEY = "recallTopK";
 const DEFAULT_TOP_K = 3;
 
 // ─── Text Extraction ──────────────────────────────────────────────────────────
@@ -92,167 +86,37 @@ function injectText(text: string): void {
   document.execCommand("insertText", false, text);
 }
 
-// ─── RAG Prompt Formatter ─────────────────────────────────────────────────────
-
-function formatRAGPrompt(
-  query: string,
-  results: SearchMemoriesResponse["payload"]["results"],
-): string {
-  const memoryBlocks = results
-    .map(
-      (m, i) =>
-        `--- Memory ${i + 1} ---\n` +
-        `${m.content}\n` +
-        `---------------------`,
-    )
-    .join("\n");
-
-  return (
-    "[System Context: The following are relevant memories from our past conversations. Use them as background knowledge for your response.]\n" +
-    memoryBlocks +
-    "\n[User Query]\n" +
-    query
-  );
-}
-
-// ─── Background Message Bridge ────────────────────────────────────────────────
-
-function getTopK(): number {
-  const input = document.getElementById(INPUT_ID) as HTMLInputElement | null;
-  if (input) {
-    const v = parseInt(input.value, 10);
-    if (!isNaN(v) && v >= 1) return Math.min(v, 20);
-  }
-  return DEFAULT_TOP_K;
-}
-
-function searchMemories(query: string): Promise<SearchMemoriesResponse> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      {
-        type: "SEARCH_MEMORIES",
-        payload: { query: query || "general context", topK: getTopK() },
-      },
-      (resp: SearchMemoriesResponse | undefined) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        if (!resp) {
-          reject(new Error("No response from background script"));
-          return;
-        }
-        resolve(resp);
-      },
-    );
-  });
-}
-
-// ─── Button Click Handler ─────────────────────────────────────────────────────
-
-async function handleRecallClick(btn: HTMLButtonElement): Promise<void> {
-  const { promptEmpty, alreadyRecalled } = getRecallMessagesForContentScript();
-  const query = getInputText().trim();
-  if (!query) {
-    alert(promptEmpty);
-    return;
-  }
-  if (query.includes("[System Context: The following are relevant memories")) {
-    alert(alreadyRecalled);
-    return;
-  }
-  console.log("[AI Memory] Recall clicked, query:", query);
-
-  btn.textContent = "Searching...";
-  btn.disabled = true;
-
-  try {
-    const response = await searchMemories(query);
-    console.log("[AI Memory] Search response:", response);
-    const results = response.payload.results ?? [];
-
-    if (results.length === 0) {
-      alert("[AI Memory] No relevant memories found for your query.");
-      return;
-    }
-
-    injectText(formatRAGPrompt(query, results));
-    chrome.runtime
-      .sendMessage({ type: "FIRST_RECALL_USED" })
-      .catch(() => void 0);
-    stopOnboardingHighlight(BUTTON_ID);
-  } catch (err) {
-    console.error("[AI Memory] Recall failed:", err);
-    alert(`[AI Memory] Search failed: ${String(err)}`);
-  } finally {
-    btn.textContent = "Recall";
-    btn.disabled = false;
-  }
-}
-
 // ─── Button Creation ──────────────────────────────────────────────────────────
 
 function createRecallButton(): HTMLElement {
-  const wrapper = document.createElement("span");
-  Object.assign(wrapper.style, RECALL_WRAPPER_STYLE, {
-    pointerEvents: "auto",
-    position: "relative",
-    zIndex: "9999",
+  return sharedCreateRecallButton({
+    buttonId: BUTTON_ID,
+    inputId: INPUT_ID,
+    defaultTopK: DEFAULT_TOP_K,
+    extraWrapperStyles: {
+      pointerEvents: "auto",
+      position: "relative",
+      zIndex: "9999",
+    },
+    extraButtonStyles: { pointerEvents: "auto" },
+    onButtonClick: (btn, e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void sharedHandleRecallClick(btn, {
+        buttonId: BUTTON_ID,
+        inputId: INPUT_ID,
+        defaultTopK: DEFAULT_TOP_K,
+        getInputText,
+        injectText,
+      });
+    },
+    extraButtonListeners: (btn) => {
+      // Fallback: some host-page event handlers swallow click; use mousedown as backup
+      btn.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+    },
   });
-
-  // topK input
-  const input = document.createElement("input");
-  input.id = INPUT_ID;
-  input.type = "number";
-  input.min = "1";
-  input.max = "20";
-  input.title = "Number of memories to recall";
-  Object.assign(input.style, RECALL_INPUT_STYLE);
-
-  chrome.storage.local.get([STORAGE_KEY], (res) => {
-    input.value = String(res[STORAGE_KEY] ?? DEFAULT_TOP_K);
-  });
-
-  input.addEventListener("change", () => {
-    const v = Math.max(
-      1,
-      Math.min(20, parseInt(input.value, 10) || DEFAULT_TOP_K),
-    );
-    input.value = String(v);
-    chrome.storage.local.set({ [STORAGE_KEY]: v });
-  });
-
-  input.addEventListener("keydown", (e) => e.stopPropagation());
-
-  const btn = document.createElement("button");
-  btn.id = BUTTON_ID;
-  btn.textContent = "Recall";
-  btn.title = "Recall past memories and inject as context";
-  btn.type = "button";
-  Object.assign(btn.style, RECALL_BUTTON_STYLE, {
-    pointerEvents: "auto",
-  });
-
-  btn.addEventListener("pointerenter", () => {
-    if (!btn.disabled) btn.style.opacity = "1";
-  });
-  btn.addEventListener("pointerleave", () => {
-    btn.style.opacity = "0.96";
-  });
-
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    void handleRecallClick(btn);
-  });
-  // Fallback: some host-page event handlers swallow click; use mousedown as backup
-  btn.addEventListener("mousedown", (e) => {
-    e.stopPropagation();
-  });
-
-  wrapper.appendChild(input);
-  wrapper.appendChild(btn);
-  return wrapper;
 }
 
 // ─── Insertion Point Resolution ───────────────────────────────────────────────

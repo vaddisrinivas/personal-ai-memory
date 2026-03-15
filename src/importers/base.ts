@@ -1,4 +1,4 @@
-import type { AIProvider, SerializableMemoryRecord } from '../../../types/memory'
+import type { AIProvider, SerializableMemoryRecord } from '../types/memory'
 
 /**
  * Strategy interface for converting a provider's conversation export file

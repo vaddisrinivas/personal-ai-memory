@@ -11,7 +11,7 @@
  */
 
 import { mainWorldInterceptor } from "./injector";
-import { MODEL_NAME, EMBEDDING_VERSION } from "./embedding";
+import { MODEL_NAME } from "./embedding";
 import { ChatGPTAdapter } from "./adapters/chatgpt";
 import { ClaudeAdapter } from "./adapters/claude";
 import { GeminiAdapter } from "./adapters/gemini";
@@ -37,7 +37,6 @@ import type {
   SearchMemoriesRequest,
   ImportMemoriesRequest,
   DomSyncRequest,
-  DomSyncResponse,
 } from "../types/messages";
 import { handleSearchMemories, hydrateSearchIndex, miniSearch } from "./search";
 import type { MemoryRecord } from "../types/memory";
@@ -46,10 +45,18 @@ import {
   FOLDERS_STORAGE_KEY,
 } from "../constants/prompts";
 import { processPendingEmbeddings } from "./syncEmbeddings";
+import { chunkText, expandToChunks } from "./chunking";
+import {
+  embedViaOffscreen,
+  embedBatchViaOffscreen,
+  queueEmbedding,
+} from "./offscreen";
+import { handleDomSync } from "./domSync";
+import { maybeFetchPerplexityThreadHistory } from "./perplexityBgFetch";
 
-// Embedding runs in an Offscreen Document (full DOM context) via Chrome's
-// chrome.offscreen API, avoiding the MV3 Service Worker WASM/DOM limitations.
-const SKIP_EMBEDDING_FOR_TEST = false;
+// Re-export for backward compatibility (tests import chunkText/expandToChunks from this module)
+export { chunkText, expandToChunks } from "./chunking";
+export { embedViaOffscreen, embedBatchViaOffscreen } from "./offscreen";
 
 // ─── Adapter Registry ─────────────────────────────────────────────────────────
 
@@ -63,44 +70,6 @@ const adapters: IAdapter[] = [
 
 function findAdapter(url: string): IAdapter | undefined {
   return adapters.find((a) => a.canHandle(url));
-}
-
-// ─── Chunking ─────────────────────────────────────────────────────────────────
-// paraphrase-multilingual-MiniLM-L12-v2 has a ~128-token context window.
-// We split long content into overlapping character windows so each chunk fits
-// comfortably. Overlap preserves cross-boundary context for better retrieval.
-
-const CHUNK_SIZE_CHARS = 500; // ~100-125 tokens for mixed Chinese/English
-const CHUNK_OVERLAP_CHARS = 75; // ~15% overlap to avoid cutting mid-sentence
-
-export function chunkText(text: string): string[] {
-  if (text.length <= CHUNK_SIZE_CHARS) return [text];
-
-  const chunks: string[] = [];
-  let i = 0;
-  while (i < text.length) {
-    chunks.push(text.slice(i, i + CHUNK_SIZE_CHARS));
-    i += CHUNK_SIZE_CHARS - CHUNK_OVERLAP_CHARS;
-  }
-  return chunks;
-}
-
-/**
- * Expands a single MemoryRecord into one or more chunk records.
- * Short content (≤ CHUNK_SIZE_CHARS) is returned as-is (no extra fields).
- * Long content is split; each chunk gets a unique id, chunkIndex, and parentId.
- */
-export function expandToChunks(record: MemoryRecord): MemoryRecord[] {
-  const chunks = chunkText(record.content);
-  if (chunks.length === 1) return [record];
-
-  return chunks.map((content, i) => ({
-    ...record,
-    id: `${record.id}-c${i}`,
-    content,
-    chunkIndex: i,
-    parentId: record.id,
-  }));
 }
 
 // ─── Capture Handler ──────────────────────────────────────────────────────────
@@ -178,19 +147,13 @@ async function handleCaptureMessage(
       const id = await safeAddRecord(chunk);
       if (id) {
         ids.push(id);
-        const preview =
-          chunk.content.slice(0, 50) + (chunk.content.length > 50 ? "…" : "");
-        const chunkLabel =
-          chunk.chunkIndex !== undefined ? ` [chunk ${chunk.chunkIndex}]` : "";
         // Keep MiniSearch in sync with Dexie
         try {
           miniSearch.add(chunk);
         } catch {
           /* duplicate id — already indexed */
         }
-        if (!SKIP_EMBEDDING_FOR_TEST) {
-          queueEmbedding(chunk);
-        }
+        queueEmbedding(chunk);
       }
     }
   }
@@ -210,156 +173,6 @@ async function handleCaptureMessage(
   }
 
   return { success: true, recordId: ids[0] };
-}
-
-// ─── Offscreen Document Management ───────────────────────────────────────────
-// Transformers.js (ONNX/WASM) requires DOM APIs not available in Service Workers.
-// We create a hidden offscreen document that has full DOM access, then route
-// embedding requests there via chrome.runtime.sendMessage.
-
-const OFFSCREEN_URL = chrome.runtime.getURL("tabs/offscreen.html");
-let _creatingOffscreen = false;
-
-async function ensureOffscreenDocument(): Promise<void> {
-  // chrome.runtime.getContexts is available in Chrome 116+
-  if (chrome.runtime.getContexts) {
-    const contexts = await chrome.runtime.getContexts({
-      contextTypes: ["OFFSCREEN_DOCUMENT" as chrome.runtime.ContextType],
-      documentUrls: [OFFSCREEN_URL],
-    });
-    if (contexts.length > 0) return;
-  }
-
-  if (_creatingOffscreen) {
-    // Wait for an in-progress creation to finish
-    await new Promise<void>((resolve) => {
-      const poll = setInterval(() => {
-        if (!_creatingOffscreen) {
-          clearInterval(poll);
-          resolve();
-        }
-      }, 50);
-    });
-    return;
-  }
-
-  _creatingOffscreen = true;
-  try {
-    await chrome.offscreen.createDocument({
-      url: OFFSCREEN_URL,
-      reasons: [
-        "BLOBS" as chrome.offscreen.Reason,
-        "WORKERS" as chrome.offscreen.Reason,
-      ],
-      justification: "Run ONNX/WASM text embedding inference for AI Memory",
-    });
-  } finally {
-    _creatingOffscreen = false;
-  }
-}
-
-// Texts longer than 2000 chars exceed all-MiniLM-L6-v2's 512-token context window.
-// Truncate before embedding (MVP: simple character truncation).
-const MAX_EMBED_CHARS = 2000;
-
-export async function embedViaOffscreen(text: string): Promise<Float32Array> {
-  await ensureOffscreenDocument();
-  const truncated =
-    text.length > MAX_EMBED_CHARS ? text.slice(0, MAX_EMBED_CHARS) : text;
-
-  return new Promise<Float32Array>((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: "EMBED_TEXT", payload: { text: truncated } },
-      (
-        response:
-          | { success: boolean; embedding?: number[]; error?: string }
-          | undefined,
-      ) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        if (response?.success && response.embedding) {
-          resolve(new Float32Array(response.embedding));
-        } else {
-          reject(
-            new Error(
-              response?.error ?? "Embedding failed in offscreen document",
-            ),
-          );
-        }
-      },
-    );
-  });
-}
-
-export async function embedBatchViaOffscreen(
-  texts: string[],
-): Promise<Array<Float32Array | null>> {
-  await ensureOffscreenDocument();
-  const truncated = texts.map((t) =>
-    t.length > MAX_EMBED_CHARS ? t.slice(0, MAX_EMBED_CHARS) : t,
-  );
-  return new Promise<Array<Float32Array | null>>((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: "EMBED_BATCH", payload: { texts: truncated } },
-      (
-        response:
-          | {
-              success: boolean;
-              results?: Array<{
-                success: boolean;
-                embedding?: number[];
-                error?: string;
-              }>;
-              error?: string;
-            }
-          | undefined,
-      ) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        if (!response?.success || !response.results) {
-          reject(new Error(response?.error ?? "EMBED_BATCH failed"));
-          return;
-        }
-        resolve(
-          response.results.map((r) =>
-            r.success && r.embedding ? new Float32Array(r.embedding) : null,
-          ),
-        );
-      },
-    );
-  });
-}
-
-// ─── Embedding Queue (US2) ────────────────────────────────────────────────────
-
-const EMBED_RETRY_DELAYS_MS = [2000, 5000, 15000];
-
-function queueEmbedding(record: MemoryRecord, attempt = 0): void {
-  embedViaOffscreen(record.content)
-    .then((embedding) =>
-      db.updateEmbedding(record.id, embedding, MODEL_NAME, EMBEDDING_VERSION),
-    )
-    .catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isConnectionError =
-        msg.includes("Receiving end does not exist") ||
-        msg.includes("Could not establish connection");
-
-      // Retry transient connection errors (offscreen document not ready yet)
-      if (isConnectionError && attempt < EMBED_RETRY_DELAYS_MS.length) {
-        const delay = EMBED_RETRY_DELAYS_MS[attempt];
-        setTimeout(() => queueEmbedding(record, attempt + 1), delay);
-        return;
-      }
-
-      // Permanent failure — record stays at hasEmbedding: 0 for startup sweep
-      console.warn("[AI Memory] Embedding failed for record", record.id, err);
-      void db.logError("EMBEDDING_FAILED", { recordId: record.id, error: msg });
-    });
 }
 
 // ─── Status Broadcast ─────────────────────────────────────────────────────────
@@ -591,120 +404,6 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
   }
 }
 
-// ─── DOM Sync Handler ─────────────────────────────────────────────────────────
-// Processes historical messages discovered by the DOM scanner in chatgpt-injector.
-//
-// Safety rules:
-//   1. Deduplicate first — never write a record whose id already exists in Dexie.
-//   2. Process one record at a time through the embedding queue (avoids WASM OOM).
-//   3. Return immediately to the content script with queued/skipped counts so the
-//      UI can show a "syncing…" indicator if desired — the actual embedding work
-//      continues asynchronously in the background.
-
-/** Serial sync queue — processes DOM-sourced records one-by-one. */
-const _syncQueue: (() => Promise<void>)[] = [];
-let _syncRunning = false;
-
-function drainSyncQueue(): void {
-  if (_syncRunning || _syncQueue.length === 0) return;
-  _syncRunning = true;
-
-  const next = _syncQueue.shift()!;
-  next()
-    .catch((err) => {
-      console.warn("[AI Memory] DOM sync queue error:", err);
-    })
-    .finally(() => {
-      _syncRunning = false;
-      drainSyncQueue(); // process next item
-    });
-}
-
-function enqueueSyncRecord(record: MemoryRecord): void {
-  _syncQueue.push(async () => {
-    for (const chunk of expandToChunks(record)) {
-      const id = await safeAddRecord(chunk);
-      if (id) {
-        const preview =
-          chunk.content.slice(0, 50) + (chunk.content.length > 50 ? "…" : "");
-        const chunkLabel =
-          chunk.chunkIndex !== undefined ? ` [chunk ${chunk.chunkIndex}]` : "";
-        try {
-          miniSearch.add(chunk);
-        } catch {
-          /* duplicate id — already indexed */
-        }
-        if (!SKIP_EMBEDDING_FOR_TEST) {
-          queueEmbedding(chunk);
-        }
-      }
-    }
-  });
-  drainSyncQueue();
-}
-
-async function handleDomSync(
-  message: DomSyncRequest,
-): Promise<DomSyncResponse> {
-  const { messages, url } = message.payload;
-
-  if (!isCaptureEnabled()) {
-    return {
-      type: "DOM_SYNC_RESPONSE",
-      payload: { queued: 0, skipped: messages.length, error: "QUOTA_EXCEEDED" },
-    };
-  }
-
-  if (!messages.length) {
-    return { type: "DOM_SYNC_RESPONSE", payload: { queued: 0, skipped: 0 } };
-  }
-
-  // Bulk deduplication — one DB round-trip for all message IDs
-  const allIds = messages.map((m) => m.messageId);
-  const newIds = new Set(await db.filterNewMessageIds(allIds));
-
-  const newMessages = messages.filter((m) => newIds.has(m.messageId));
-  const skipped = messages.length - newMessages.length;
-
-  const now = Date.now();
-  for (const msg of newMessages) {
-    const record: MemoryRecord = {
-      id: msg.messageId,
-      role: msg.role,
-      content: msg.content,
-      provider: "openai",
-      sessionId: msg.sessionId,
-      timestamp: msg.scannedAt, // best approximation — no network timestamp
-      createdAt: now,
-      isPartial: false,
-      isDeleted: false,
-      isSuperseded: false,
-      metadata: {
-        source: "dom_scan",
-        turnIndex: msg.turnIndex,
-        pageTitle: msg.pageTitle,
-        url,
-      },
-    };
-    enqueueSyncRecord(record);
-  }
-
-  // Update the conversation title while we're here (non-blocking)
-  if (newMessages.length > 0) {
-    const first = newMessages[0];
-    if (first.pageTitle && first.sessionId) {
-      void db.upsertConversationTitle(first.sessionId, first.pageTitle);
-    }
-    lastCaptureTime = now;
-    void broadcastStatusUpdate();
-  }
-
-  return {
-    type: "DOM_SYNC_RESPONSE",
-    payload: { queued: newMessages.length, skipped },
-  };
-}
-
 // ─── Message Router ───────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -847,7 +546,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case "DOM_SYNC":
-      handleDomSync(message as DomSyncRequest)
+      handleDomSync(message as DomSyncRequest, () => {
+        lastCaptureTime = Date.now();
+        void broadcastStatusUpdate();
+      })
         .then(sendResponse)
         .catch((err) =>
           sendResponse({
@@ -895,126 +597,6 @@ function injectMainWorld(tabId: number): void {
     });
 }
 
-// ─── Perplexity background-fetch fallback ─────────────────────────────────────
-// When Cloudflare Access blocks Perplexity's restricted static JS on page reload,
-// the SPA may not fully initialise, so the page-level fetch to /rest/thread/<slug>
-// is never made and our fetch interceptor never fires.
-// Solution: the background SW proactively fetches the thread REST endpoint on
-// tab-complete for Perplexity thread pages. The extension has host_permissions for
-// www.perplexity.ai, so `credentials: 'include'` carries the user's auth cookies.
-
-/**
- * Extracts the thread slug from a Perplexity thread page URL.
- * Matches https://www.perplexity.ai/search/<slug>
- */
-function extractPerplexityThreadSlug(pageUrl: string): string | null {
-  try {
-    const u = new URL(pageUrl);
-    if (u.hostname !== "www.perplexity.ai") return null;
-    const m = u.pathname.match(/^\/search\/([^/]+)$/);
-    return m ? decodeURIComponent(m[1]) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Proactively fetches Perplexity thread history from the background service worker.
- * This runs independently of the page's JS, bypassing any Cloudflare Access issues
- * that might prevent the page from making the request itself.
- */
-async function maybeFetchPerplexityThreadHistory(
-  pageUrl: string,
-): Promise<void> {
-  const slug = extractPerplexityThreadSlug(pageUrl);
-  if (!slug) return;
-
-  // Build REST URL with the same block-use-cases the SPA normally requests
-  const params = new URLSearchParams({
-    with_parent_info: "true",
-    with_schematized_response: "true",
-    version: "2.18",
-    source: "default",
-    limit: "50",
-    offset: "0",
-    from_first: "true",
-  });
-  for (const useCase of [
-    "answer_modes",
-    "media_items",
-    "knowledge_cards",
-    "inline_entity_cards",
-    "place_widgets",
-    "finance_widgets",
-    "news_widgets",
-    "shopping_widgets",
-    "search_result_widgets",
-    "inline_images",
-    "inline_assets",
-    "diff_blocks",
-    "inline_knowledge_cards",
-    "answer_tabs",
-    "preserve_latex",
-    "in_context_suggestions",
-    "inline_claims",
-    "unified_assets",
-  ]) {
-    params.append("supported_block_use_cases", useCase);
-  }
-
-  const restUrl = `https://www.perplexity.ai/rest/thread/${encodeURIComponent(slug)}?${params.toString()}`;
-
-  try {
-    const res = await fetch(restUrl, {
-      credentials: "include",
-      headers: {
-        Accept: "application/json",
-        Referer: pageUrl,
-      },
-    });
-
-    if (!res.ok) {
-      console.warn(
-        "[AI Memory] Perplexity bg fetch failed, status:",
-        res.status,
-        "slug:",
-        slug,
-      );
-      return;
-    }
-
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      console.warn(
-        "[AI Memory] Perplexity bg fetch non-JSON response:",
-        contentType,
-        "slug:",
-        slug,
-      );
-      return;
-    }
-
-    const data: unknown = await res.json();
-    if (!data || typeof data !== "object") return;
-
-    // Only proceed if it looks like a valid thread history response
-    const d = data as Record<string, unknown>;
-    if (d["status"] !== "success" || !Array.isArray(d["entries"])) return;
-
-    const result = await handleCaptureMessage({
-      type: "CAPTURE_MESSAGE",
-      payload: {
-        provider: "perplexity",
-        rawData: data,
-        url: restUrl,
-        timestamp: Date.now(),
-      },
-    });
-  } catch (err) {
-    console.warn("[AI Memory] Perplexity bg fetch error for slug:", slug, err);
-  }
-}
-
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const status = changeInfo.status;
   const url = tab.url ?? "";
@@ -1027,7 +609,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // Fallback: proactively fetch Perplexity thread history from the background SW
   // in case the page's JS fails to run (e.g. Cloudflare Access blocking static files).
   if (status === "complete" && url.includes("www.perplexity.ai/search/")) {
-    void maybeFetchPerplexityThreadHistory(url);
+    void maybeFetchPerplexityThreadHistory(url, handleCaptureMessage);
   }
 });
 
@@ -1063,15 +645,6 @@ function injectIntoAITabs(): void {
     }
   });
 }
-
-const AI_ORIGINS_FOR_PANEL = [
-  "https://chat.openai.com",
-  "https://chatgpt.com",
-  "https://claude.ai",
-  "https://gemini.google.com",
-  "https://www.perplexity.ai",
-  "https://grok.com",
-];
 
 chrome.action.onClicked.addListener((tab) => {
   if (!tab.id) return;

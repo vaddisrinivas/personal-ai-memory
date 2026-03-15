@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseClaudeConversations } from '../../../src/popup/components/importers/claudeConversations'
+import { parseClaudeConversations } from '../../../src/importers/claudeConversations'
 
 const CONV_UUID = 'f88687d6-b4be-42ed-babe-38ee2ba78b52'
 const MSG_UUID_1 = '019ca07d-f0b7-78ce-bebb-4dfbc9308140'

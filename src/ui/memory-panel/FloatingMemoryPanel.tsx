@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { loadFromChrome, saveToChrome } from "../../utils/chrome-storage";
 import { MemoryTableView } from "../../popup/components/MemoryTableView";
 import { ImportView } from "../../popup/components/ImportView";
 import { ExportView } from "../../popup/components/ExportView";
@@ -202,6 +203,15 @@ function useThemeTransitionStyle() {
   }, []);
 }
 
+type PanelView = "menu" | "memory" | "folder" | "settings";
+const PANEL_VIEWS: readonly string[] = ["menu", "memory", "folder", "settings"];
+const STORAGE_PANEL_OPEN = "ai-memory-panel-open";
+const STORAGE_PANEL_VIEW = "ai-memory-panel-view";
+
+function isValidPanelView(v: unknown): v is PanelView {
+  return typeof v === "string" && PANEL_VIEWS.includes(v);
+}
+
 function FloatingMemoryPanelInner() {
   useThemeTransitionStyle();
   const { t, lang, setLang, langNames, langCodes } = useTranslation();
@@ -209,9 +219,8 @@ function FloatingMemoryPanelInner() {
   const tk = getThemeTokens(theme);
   const [logoHidden, setLogoHidden] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [panelView, setPanelView] = useState<
-    "menu" | "memory" | "folder" | "settings"
-  >("menu");
+  const [panelView, setPanelView] = useState<PanelView>("menu");
+  const persistedRef = useRef(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const [logoTop, setLogoTop] = useState(() => clampLogoTop(100));
   const [panelPos, setPanelPos] = useState<{
@@ -251,11 +260,35 @@ function FloatingMemoryPanelInner() {
 
   const refreshData = useCallback(() => setDataVersion((v) => v + 1), []);
 
+  // Restore panel state on mount
+  useEffect(() => {
+    void (async () => {
+      const open = await loadFromChrome(
+        STORAGE_PANEL_OPEN,
+        (v): v is boolean => typeof v === "boolean",
+      );
+      const view = await loadFromChrome(STORAGE_PANEL_VIEW, isValidPanelView);
+      if (open !== null) setPanelOpen(open);
+      if (view !== null) setPanelView(view);
+      persistedRef.current = true;
+    })();
+  }, []);
+
+  // Persist panel state on change
+  useEffect(() => {
+    if (!persistedRef.current) return;
+    void saveToChrome(STORAGE_PANEL_OPEN, panelOpen);
+  }, [panelOpen]);
+
+  useEffect(() => {
+    if (!persistedRef.current) return;
+    void saveToChrome(STORAGE_PANEL_VIEW, panelView);
+  }, [panelView]);
+
   const closePanel = useCallback(() => setPanelOpen(false), []);
   const openPanel = useCallback(() => {
     setLogoHidden(false);
     setPanelOpen(true);
-    setPanelView("menu");
     setPanelPos((prev) => {
       if (prev !== null) return prev;
       const vw = window.innerWidth;

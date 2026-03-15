@@ -1,4 +1,4 @@
-import type { SerializableMemoryRecord } from '../../../types/memory'
+import type { SerializableMemoryRecord } from '../types/memory'
 import type { IConversationImporter } from './base'
 import { registerImporter } from './base'
 
