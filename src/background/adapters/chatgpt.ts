@@ -19,7 +19,7 @@ import {
 export class ChatGPTAdapter implements IAdapter {
   private static readonly HANDLED_PATTERNS = [
     'api.openai.com/v1/chat/completions',
-    'chatgpt.com/backend-api/f/conversation',   // ChatGPT web UI (delta v1)
+    'chatgpt.com/backend-api/conversation',
     'chat.openai.com/backend-api/conversation',
   ]
 
