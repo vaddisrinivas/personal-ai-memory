@@ -2,6 +2,8 @@
  * Reusable Chrome extension API mock for Vitest tests.
  */
 
+import { vi } from "vitest"
+
 type Listener = (...args: unknown[]) => void
 
 let _lastError: { message: string } | undefined = undefined
