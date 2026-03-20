@@ -44,9 +44,7 @@ export function FolderView({ onBack, width }: FolderViewProps) {
   const [expandedPromptIds, setExpandedPromptIds] = useState<Set<string>>(new Set())
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [addedToFavId, setAddedToFavId] = useState<string | null>(null)
-  // Tracks prompts removed from folders this session — excluded from "From Favorites" drag source
   const [removedFromFolderIds, setRemovedFromFolderIds] = useState<Set<string>>(new Set())
-  // Tracks intra-folder drag-to-reorder state
   const [reorderDragId, setReorderDragId] = useState<string | null>(null)
   const [reorderFolderId, setReorderFolderId] = useState<string | null>(null)
 
