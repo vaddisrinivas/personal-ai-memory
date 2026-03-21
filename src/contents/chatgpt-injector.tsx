@@ -148,14 +148,29 @@ function findFlexSibling(
  * Priority:
  *   1. "Start Voice" / send button → walk to flex row → insert before its slot
  *   2. Dictate / mic button → walk to flex row → insert after its slot
- *   3. Walk up from #prompt-textarea, find ancestor with ≥2 direct children
+ *   3. Logged-out speech button container → walk to flex row → insert before its slot
+ *   4. Walk up from #prompt-textarea, find ancestor with ≥2 direct children
  *      → insert before the last child
  */
 function findInsertionPoint(): {
   container: HTMLElement;
   before: HTMLElement | null;
 } | null {
-  // Strategy 1: insert before "Start Voice" slot in the flex row
+  // Strategy 1 (logged-out grid layout): insert inside the flex row that contains
+  // composer-speech-button-container, just before the container itself.
+  // This must run before the selector-based strategies because "Start Voice" also
+  // exists in the logged-out DOM but findFlexSibling walks to the wrong ancestor.
+  const speechContainer = document.querySelector<HTMLElement>(
+    '[data-testid="composer-speech-button-container"]',
+  );
+  if (speechContainer?.parentElement) {
+    return {
+      container: speechContainer.parentElement as HTMLElement,
+      before: speechContainer,
+    };
+  }
+
+  // Strategy 2: insert before "Start Voice" slot in the flex row
   for (const sel of BEFORE_BUTTON_SELECTORS) {
     const btn = document.querySelector<HTMLElement>(sel);
     if (btn) {
@@ -164,7 +179,7 @@ function findInsertionPoint(): {
     }
   }
 
-  // Strategy 2: insert after the Dictate button's slot in the flex row
+  // Strategy 3: insert after the Dictate button's slot in the flex row
   for (const sel of MIC_BUTTON_SELECTORS) {
     const mic = document.querySelector<HTMLElement>(sel);
     if (mic) {
@@ -178,7 +193,7 @@ function findInsertionPoint(): {
     }
   }
 
-  // Strategy 3: walk up from #prompt-textarea, find ancestor with ≥2 direct children
+  // Strategy 4: walk up from #prompt-textarea, find ancestor with ≥2 direct children
   const textarea = document.getElementById("prompt-textarea");
   if (!textarea) return null;
 
