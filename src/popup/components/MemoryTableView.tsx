@@ -590,16 +590,23 @@ export function MemoryTableView({
       </div>
       <button
         type="button"
-        title={sortDesc ? t.sortNewest : t.sortOldest}
         onClick={() => setSortDesc((prev) => !prev)}
         style={{
           ...S.iconBtn,
           backgroundColor: tk.btnBg,
           borderColor: tk.border,
           color: tk.textMuted,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          paddingLeft: 8,
+          paddingRight: 8,
+          fontSize: 11,
+          whiteSpace: "nowrap",
         }}
       >
         {sortDesc ? <ArrowDownWideNarrowIcon /> : <ArrowUpWideNarrowIcon />}
+        <span>{sortDesc ? t.sortNewest : t.sortOldest}</span>
       </button>
     </div>
   ) : null;
@@ -689,7 +696,6 @@ export function MemoryTableView({
           {!onBack && (
             <button
               type="button"
-              title={sortDesc ? t.sortNewest : t.sortOldest}
               onClick={() => setSortDesc((prev) => !prev)}
               style={{
                 marginLeft: "auto",
@@ -697,6 +703,13 @@ export function MemoryTableView({
                 backgroundColor: tk.btnBg,
                 borderColor: tk.border,
                 color: tk.textMuted,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                paddingLeft: 8,
+                paddingRight: 8,
+                fontSize: 11,
+                whiteSpace: "nowrap",
               }}
             >
               {sortDesc ? (
@@ -704,6 +717,7 @@ export function MemoryTableView({
               ) : (
                 <ArrowUpWideNarrowIcon />
               )}
+              <span>{sortDesc ? t.sortNewest : t.sortOldest}</span>
             </button>
           )}
         </div>
