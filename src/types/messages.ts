@@ -76,6 +76,7 @@ export interface QueryRecordsRequest {
       startTime?: number
       endTime?: number
       limit?: number
+      offset?: number
     }
   }
 }
