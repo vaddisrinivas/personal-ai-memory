@@ -86,6 +86,7 @@ export class MemoryDatabase extends Dexie {
     startTime?: number;
     endTime?: number;
     limit?: number;
+    offset?: number;
   }): Promise<{ records: MemoryRecord[]; total: number }> {
     let collection = this.memories.filter((r) => !r.isDeleted);
 
@@ -111,14 +112,18 @@ export class MemoryDatabase extends Dexie {
     });
 
     const limit = filters?.limit ?? 50;
-    // Return the most recent `limit` records (last N elements when sorted ascending).
-    // This ensures newly-captured records (e.g. Perplexity) are not cut off when
-    // there are already many older records from other providers.
-    const recentRecords =
-      filtered.length > limit ? filtered.slice(-limit) : filtered;
+    const offset = filters?.offset ?? 0;
+    const total = filtered.length;
+
+    // Slice from the newest end: skip `offset` from the end, then take `limit` before that.
+    // Records are sorted ascending by timestamp, so the most recent are at the end.
+    const endIdx = total - offset;
+    const startIdx = Math.max(0, endIdx - limit);
+    const recentRecords = endIdx > 0 ? filtered.slice(startIdx, endIdx) : [];
+
     return {
       records: recentRecords,
-      total: filtered.length,
+      total,
     };
   }
 
