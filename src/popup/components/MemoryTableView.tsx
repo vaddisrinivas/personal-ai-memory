@@ -21,7 +21,7 @@ type ProviderFilter = "all" | "openai" | "anthropic" | "google" | "perplexity" |
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const FETCH_LIMIT = 300;
+const PAGE_SIZE = 50;
 
 function formatLocalTime(ms: number): string {
   return new Date(ms).toLocaleString(undefined, {
@@ -144,6 +144,7 @@ const MEMORY_ANIMATION_CSS = `
 }
 .aim-row-enter { animation: aimRowFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) both; }
 .aim-row-exit  { animation: aimRowFadeOut 0.25s cubic-bezier(0.4, 0, 0.2, 1) both; pointer-events: none; }
+@keyframes aim-spin { to { transform: rotate(360deg); } }
 `;
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -195,6 +196,11 @@ export function MemoryTableView({
   const [searchCollapsed, setSearchCollapsed] = useState<Set<string>>(
     new Set(),
   );
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const totalRef = useRef(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Inject animation keyframes once
   useEffect(() => {
@@ -296,20 +302,24 @@ export function MemoryTableView({
     );
   }, []);
 
+  // Initial/reset load: clears records and fetches page 0
   const load = useCallback(
     (showSpinner = false) => {
       if (showSpinner) setLoading(true);
       chrome.runtime.sendMessage(
-        { type: "QUERY_RECORDS", payload: { filters: { limit: FETCH_LIMIT } } },
+        { type: "QUERY_RECORDS", payload: { filters: { limit: PAGE_SIZE, offset: 0 } } },
         (response: QueryRecordsResponse | undefined) => {
           if (chrome.runtime.lastError || !response) {
             setRecords([]);
             setLoading(false);
+            setHasMore(false);
           } else {
-            setRecords(response.payload.records);
-            const sessionIds = Array.from(
-              new Set(response.payload.records.map((r) => r.sessionId)),
-            );
+            const { records: newRecords, total } = response.payload;
+            totalRef.current = total;
+            setRecords(newRecords);
+            setOffset(PAGE_SIZE);
+            setHasMore(PAGE_SIZE < total);
+            const sessionIds = Array.from(new Set(newRecords.map((r) => r.sessionId)));
             loadTitles(sessionIds);
             setLoading(false);
           }
@@ -319,7 +329,33 @@ export function MemoryTableView({
     [loadTitles],
   );
 
+  // Append next page (called by IntersectionObserver)
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    chrome.runtime.sendMessage(
+      { type: "QUERY_RECORDS", payload: { filters: { limit: PAGE_SIZE, offset } } },
+      (response: QueryRecordsResponse | undefined) => {
+        if (chrome.runtime.lastError || !response) {
+          setLoadingMore(false);
+          return;
+        }
+        const { records: newRecords, total } = response.payload;
+        totalRef.current = total;
+        // Prepend older records (they have lower timestamps)
+        setRecords((prev) => [...newRecords, ...prev]);
+        const nextOffset = offset + PAGE_SIZE;
+        setOffset(nextOffset);
+        setHasMore(nextOffset < total);
+        const sessionIds = Array.from(new Set(newRecords.map((r) => r.sessionId)));
+        loadTitles(sessionIds);
+        setLoadingMore(false);
+      },
+    );
+  }, [loadingMore, hasMore, offset, loadTitles]);
+
   const hasMountedRef = useRef(false);
+  const prevFilterRef = useRef(providerFilter);
 
   useEffect(() => {
     // First mount: show spinner so the empty-state doesn't flash
@@ -331,6 +367,28 @@ export function MemoryTableView({
       load(false);
     }
   }, [load, reloadKey]);
+
+  // Reset and reload when provider filter changes
+  useEffect(() => {
+    if (prevFilterRef.current !== providerFilter) {
+      prevFilterRef.current = providerFilter;
+      load(false);
+    }
+  }, [providerFilter, load]);
+
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore]);
 
   const handleDelete = useCallback(
     (displayId: string, chunkIds: string[]) => {
@@ -661,149 +719,180 @@ export function MemoryTableView({
             {t.searchNoResults}
           </div>
         ) : (
-          sessionIds.map((sessionId) => {
-            const list = groups.get(sessionId) ?? [];
-            // When searching: auto-expand by default, but respect manual collapse by user
-            const isCollapsed = q
-              ? searchCollapsed.has(sessionId)
-              : collapsedSessions.has(sessionId);
-            const title = titles.get(sessionId);
-            const providerLabel = formatProviderLabel(sessionId);
-            const displayText = title
-              ? `${title} (${providerLabel})`
-              : sessionId.length > 28
-                ? sessionId.slice(0, 25) + "…"
-                : sessionId;
-            return (
-              <div
-                key={sessionId}
-                className={newSessionIds.has(sessionId) ? "aim-row-enter" : ""}
-                style={styles.group}
-              >
-                <button
-                  type="button"
-                  style={{ ...styles.groupHeaderBtn, color: tk.textMuted }}
-                  onClick={() => toggleSession(sessionId, !!q)}
-                  aria-expanded={!isCollapsed}
+          <>
+            {sessionIds.map((sessionId) => {
+              const list = groups.get(sessionId) ?? [];
+              // When searching: auto-expand by default, but respect manual collapse by user
+              const isCollapsed = q
+                ? searchCollapsed.has(sessionId)
+                : collapsedSessions.has(sessionId);
+              const title = titles.get(sessionId);
+              const providerLabel = formatProviderLabel(sessionId);
+              const displayText = title
+                ? `${title} (${providerLabel})`
+                : sessionId.length > 28
+                  ? sessionId.slice(0, 25) + "…"
+                  : sessionId;
+              return (
+                <div
+                  key={sessionId}
+                  className={newSessionIds.has(sessionId) ? "aim-row-enter" : ""}
+                  style={styles.group}
                 >
-                  <span
-                    style={{
-                      ...styles.groupHeaderCaret,
-                      color: tk.textTertiary,
-                    }}
+                  <button
+                    type="button"
+                    style={{ ...styles.groupHeaderBtn, color: tk.textMuted }}
+                    onClick={() => toggleSession(sessionId, !!q)}
+                    aria-expanded={!isCollapsed}
                   >
-                    {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
-                  </span>
-                  <span
-                    style={styles.groupHeader}
-                    title={title ? sessionId : undefined}
-                  >
-                    {displayText}
-                  </span>
-                </button>
-                {!isCollapsed && (
-                  <div style={styles.recordList}>
-                    {mergeChunks(list).map((dr) => (
-                      <div
-                        key={dr.id}
-                        className={
-                          fadingOutIds.has(dr.id) ? "aim-row-exit" : ""
-                        }
-                        style={{
-                          ...styles.row,
-                          backgroundColor:
-                            hoverId === dr.id ? tk.btnHoverBg : tk.bgCard,
-                          borderColor: tk.border,
-                        }}
-                        onMouseEnter={() => setHoverId(dr.id)}
-                        onMouseLeave={() => setHoverId(null)}
-                      >
-                        {/* Delete X — top-right corner, always visible */}
-                        <button
-                          style={{
-                            ...styles.deleteXBtn,
-                            color: tk.textTertiary,
-                          }}
-                          disabled={fadingOutIds.has(dr.id)}
-                          onClick={() => handleDelete(dr.id, dr.chunkIds)}
-                          type="button"
-                          title={t.deleteBtn}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.color =
-                              tk.errorText;
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.color =
-                              tk.textTertiary;
-                          }}
-                        >
-                          {fadingOutIds.has(dr.id) ? "…" : "×"}
-                        </button>
-                        <div style={styles.rowMain}>
-                          <span style={{ ...styles.role, color: tk.textMuted }}>
-                            {roleLabel[dr.role] ?? dr.role}
-                            {dr.isChunked && (
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  color: tk.textTertiary,
-                                  marginLeft: 4,
-                                  fontWeight: 400,
-                                }}
-                              >
-                                ×{dr.chunkCount}
-                              </span>
-                            )}
-                          </span>
-                          <span
-                            style={{
-                              ...styles.time,
-                              color: tk.textTertiary,
-                              paddingRight: 20,
-                            }}
-                          >
-                            {formatLocalTime(dr.timestamp)}
-                          </span>
-                        </div>
+                    <span
+                      style={{
+                        ...styles.groupHeaderCaret,
+                        color: tk.textTertiary,
+                      }}
+                    >
+                      {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+                    </span>
+                    <span
+                      style={styles.groupHeader}
+                      title={title ? sessionId : undefined}
+                    >
+                      {displayText}
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <div style={styles.recordList}>
+                      {mergeChunks(list).map((dr) => (
                         <div
-                          style={{ ...styles.content, color: tk.text }}
-                          onClick={() => toggleExpanded(dr.id)}
-                          title={
-                            expandedIds.has(dr.id) ? undefined : dr.content
+                          key={dr.id}
+                          className={
+                            fadingOutIds.has(dr.id) ? "aim-row-exit" : ""
                           }
+                          style={{
+                            ...styles.row,
+                            backgroundColor:
+                              hoverId === dr.id ? tk.btnHoverBg : tk.bgCard,
+                            borderColor: tk.border,
+                          }}
+                          onMouseEnter={() => setHoverId(dr.id)}
+                          onMouseLeave={() => setHoverId(null)}
                         >
-                          {expandedIds.has(dr.id)
-                            ? dr.content
-                            : truncate(dr.content)}
-                        </div>
-                        {/* Copy button — bottom-right on its own row */}
-                        <div style={styles.bottomRow}>
+                          {/* Delete X — top-right corner, always visible */}
                           <button
+                            style={{
+                              ...styles.deleteXBtn,
+                              color: tk.textTertiary,
+                            }}
+                            disabled={fadingOutIds.has(dr.id)}
+                            onClick={() => handleDelete(dr.id, dr.chunkIds)}
                             type="button"
-                            style={{ ...styles.copyBtn, color: tk.accent }}
-                            onClick={() => copyContent(dr.content, dr.id)}
-                            title={t.copyBtn}
+                            title={t.deleteBtn}
                             onMouseEnter={(e) => {
-                              (
-                                e.currentTarget as HTMLButtonElement
-                              ).style.textDecoration = "underline";
+                              (e.currentTarget as HTMLButtonElement).style.color =
+                                tk.errorText;
                             }}
                             onMouseLeave={(e) => {
-                              (
-                                e.currentTarget as HTMLButtonElement
-                              ).style.textDecoration = "none";
+                              (e.currentTarget as HTMLButtonElement).style.color =
+                                tk.textTertiary;
                             }}
                           >
-                            {copiedId === dr.id ? t.copied : t.copyBtn}
+                            {fadingOutIds.has(dr.id) ? "…" : "×"}
                           </button>
+                          <div style={styles.rowMain}>
+                            <span style={{ ...styles.role, color: tk.textMuted }}>
+                              {roleLabel[dr.role] ?? dr.role}
+                              {dr.isChunked && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    color: tk.textTertiary,
+                                    marginLeft: 4,
+                                    fontWeight: 400,
+                                  }}
+                                >
+                                  ×{dr.chunkCount}
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              style={{
+                                ...styles.time,
+                                color: tk.textTertiary,
+                                paddingRight: 20,
+                              }}
+                            >
+                              {formatLocalTime(dr.timestamp)}
+                            </span>
+                          </div>
+                          <div
+                            style={{ ...styles.content, color: tk.text }}
+                            onClick={() => toggleExpanded(dr.id)}
+                            title={
+                              expandedIds.has(dr.id) ? undefined : dr.content
+                            }
+                          >
+                            {expandedIds.has(dr.id)
+                              ? dr.content
+                              : truncate(dr.content)}
+                          </div>
+                          {/* Copy button — bottom-right on its own row */}
+                          <div style={styles.bottomRow}>
+                            <button
+                              type="button"
+                              style={{ ...styles.copyBtn, color: tk.accent }}
+                              onClick={() => copyContent(dr.content, dr.id)}
+                              title={t.copyBtn}
+                              onMouseEnter={(e) => {
+                                (
+                                  e.currentTarget as HTMLButtonElement
+                                ).style.textDecoration = "underline";
+                              }}
+                              onMouseLeave={(e) => {
+                                (
+                                  e.currentTarget as HTMLButtonElement
+                                ).style.textDecoration = "none";
+                              }}
+                            >
+                              {copiedId === dr.id ? t.copied : t.copyBtn}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {/* Infinite scroll sentinel + bottom spinner */}
+            {hasMore && (
+              <div ref={sentinelRef} style={{ height: 1 }} />
+            )}
+            {loadingMore && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  padding: "12px 0",
+                  color: tk.textMuted,
+                }}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ animation: "aim-spin 0.8s linear infinite" }}
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
               </div>
-            );
-          })
+            )}
+          </>
         )}
       </div>
     </div>
