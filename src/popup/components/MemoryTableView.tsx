@@ -53,6 +53,17 @@ function formatProviderLabel(sessionId: string): string {
   return provider || "Unknown";
 }
 
+function getTurnIndex(r: MemoryRecord): number {
+  const idx = r.metadata?.turnIndex;
+  return typeof idx === "number" ? idx : Infinity;
+}
+
+function sortByConversationOrder(a: MemoryRecord, b: MemoryRecord): number {
+  const dt = a.timestamp - b.timestamp;
+  if (dt !== 0) return dt;
+  return getTurnIndex(a) - getTurnIndex(b);
+}
+
 function groupBySessionId(
   records: MemoryRecord[],
 ): Map<string, MemoryRecord[]> {
@@ -63,7 +74,7 @@ function groupBySessionId(
     map.set(r.sessionId, list);
   }
   for (const list of map.values()) {
-    list.sort((a, b) => a.timestamp - b.timestamp);
+    list.sort(sortByConversationOrder);
   }
   return map;
 }
@@ -79,6 +90,7 @@ interface DisplayRecord {
   createdAt: number;
   isChunked: boolean;
   chunkCount: number;
+  turnIndex: number;
 }
 
 function mergeChunks(records: MemoryRecord[]): DisplayRecord[] {
@@ -111,6 +123,7 @@ function mergeChunks(records: MemoryRecord[]): DisplayRecord[] {
       createdAt: r.createdAt,
       isChunked: false,
       chunkCount: 1,
+      turnIndex: getTurnIndex(r),
     });
   }
 
@@ -124,11 +137,16 @@ function mergeChunks(records: MemoryRecord[]): DisplayRecord[] {
       createdAt: chunks[0].createdAt,
       isChunked: true,
       chunkCount: chunks.length,
+      turnIndex: getTurnIndex(chunks[0]),
     });
   }
 
-  // Sort messages within a session by their actual conversation timestamp
-  return result.sort((a, b) => a.timestamp - b.timestamp);
+  // Sort messages within a session by conversation order (timestamp, then turnIndex)
+  return result.sort((a, b) => {
+    const dt = a.timestamp - b.timestamp;
+    if (dt !== 0) return dt;
+    return a.turnIndex - b.turnIndex;
+  });
 }
 
 // ── Animation CSS ────────────────────────────────────────────────────────────
