@@ -356,15 +356,29 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
       embedding: Array.isArray(r.embedding)
         ? new Float32Array(r.embedding)
         : undefined,
-      // Set hasEmbedding to 1 if the embedding is not empty
       hasEmbedding:
         Array.isArray(r.embedding) && r.embedding!.length > 0 ? 1 : 0,
     }));
-    await db.memories.bulkPut(records);
+
+    // Skip records already in the DB (idempotent re-import support)
+    const allIds = records.map((r) => r.id);
+    const newIds = new Set(await db.filterNewChatMessageUuids(allIds));
+    const newRecords = records.filter((r) => newIds.has(r.id));
+    const skippedCount = records.length - newRecords.length;
+
+    if (newRecords.length === 0) {
+      // Nothing new — return early, no DB writes or status broadcast needed
+      return {
+        type: "IMPORT_MEMORIES_RESPONSE" as const,
+        payload: { success: true, count: 0, skipped: skippedCount },
+      };
+    }
+
+    await db.memories.bulkPut(newRecords);
 
     // Persist conversation titles extracted from import metadata (e.g. ChatGPT)
     const titleUpdates = new Map<string, string>();
-    for (const r of records) {
+    for (const r of newRecords) {
       const title = (r.metadata as Record<string, string> | undefined)
         ?.conversationTitle;
       if (title && r.sessionId && !titleUpdates.has(r.sessionId)) {
@@ -386,7 +400,7 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
     // Rebuild keyword index so imported records are immediately searchable
     void hydrateSearchIndex();
 
-    // Process pending embeddings in the background
+    // Process pending embeddings in the background (does not block display)
     void processPendingEmbeddings();
 
     // Notify popup so MemoryTableView reloads automatically
@@ -394,7 +408,7 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
 
     return {
       type: "IMPORT_MEMORIES_RESPONSE" as const,
-      payload: { success: true, count: records.length },
+      payload: { success: true, count: newRecords.length, skipped: skippedCount },
     };
   } catch (err) {
     return {

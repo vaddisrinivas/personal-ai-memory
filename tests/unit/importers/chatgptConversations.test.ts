@@ -216,3 +216,20 @@ describe('parseChatGPTConversations — invalid input', () => {
     expect(() => parseChatGPTConversations(null)).toThrow()
   })
 })
+
+describe('parseChatGPTConversations — stable IDs for dedup', () => {
+  it('produces identical record IDs on repeated parses of the same input', () => {
+    const records1 = parseChatGPTConversations([baseConv])
+    const records2 = parseChatGPTConversations([baseConv])
+    const ids1 = records1.map(r => r.id).sort()
+    const ids2 = records2.map(r => r.id).sort()
+    expect(ids1).toEqual(ids2)
+  })
+
+  it('record IDs use the chatgpt-import prefix with the message UUID', () => {
+    const records = parseChatGPTConversations([baseConv])
+    for (const r of records) {
+      expect(r.id).toMatch(/^chatgpt-import-/)
+    }
+  })
+})
