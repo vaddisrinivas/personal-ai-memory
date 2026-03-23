@@ -168,7 +168,10 @@ function App() {
             <MemoryMenuContent
               onOpenMemory={() => navigateTo('memory')}
               onOpenFolder={() => navigateTo('folder')}
-              onImported={refreshData}
+              onImported={() => {
+                refreshData()
+                navigateTo('memory')
+              }}
             />
           </div>
         </div>
