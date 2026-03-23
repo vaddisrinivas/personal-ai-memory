@@ -518,6 +518,16 @@ export function mainWorldInterceptor(): void {
       return m ? m[1] : null;
     }
 
+    /** Extract conversation ID from the current page's canonical <link> element.
+     *  e.g. <link rel="canonical" href="https://grok.com/c/<id>">  →  "<id>"
+     */
+    function getGrokPageConversationId(): string | null {
+      const link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+      if (!link) return null;
+      const m = link.href.match(/\/c\/([^/?#]+)/);
+      return m ? m[1] : null;
+    }
+
     /**
      * Split a body text containing multiple concatenated JSON objects into an array.
      * Grok streams responses as plain JSON objects placed one after another:
@@ -1571,8 +1581,11 @@ export function mainWorldInterceptor(): void {
 
       // Intercept Grok history (load-responses)
       if (provider === "xai" && isGrokLoadResponsesUrl(url)) {
-        const conversationId = extractGrokConversationIdFromUrl(url);
-        if (conversationId) {
+        const urlConversationId = extractGrokConversationIdFromUrl(url);
+        const pageConversationId = getGrokPageConversationId();
+        // Only capture if URL conversation ID matches the current page's conversation
+        // (fall back to capturing if no canonical link is present)
+        if (urlConversationId && (pageConversationId === null || urlConversationId === pageConversationId)) {
           response
             .clone()
             .json()
@@ -1580,7 +1593,7 @@ export function mainWorldInterceptor(): void {
               if (data && typeof data === "object") {
                 const payload = {
                   ...(data as Record<string, unknown>),
-                  _conversationId: conversationId,
+                  _conversationId: urlConversationId,
                 };
                 sendCapture("xai", payload, url, timestamp);
               }

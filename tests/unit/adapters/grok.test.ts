@@ -180,6 +180,44 @@ describe('GrokAdapter.parse — load-responses', () => {
 
     expect(records).toHaveLength(0)
   })
+
+  it('handles uppercase ASSISTANT sender from real Grok API', () => {
+    const records = adapter.parse(
+      {
+        _conversationId: 'conv-1',
+        responses: [
+          { sender: 'human', message: 'Hello', responseId: 'r1' },
+          { sender: 'ASSISTANT', message: 'Hi there', responseId: 'r2', parentResponseId: 'r1' },
+        ],
+      },
+      URL,
+      TIMESTAMP
+    )
+
+    expect(records).toHaveLength(2)
+    const assistant = records.find((r) => r.role === 'assistant')
+    expect(assistant).toBeDefined()
+    expect(assistant!.id).toBe('grok-r2')
+    expect(assistant!.role).toBe('assistant')
+  })
+
+  it('handles mixed-case sender values', () => {
+    const records = adapter.parse(
+      {
+        _conversationId: 'conv-1',
+        responses: [
+          { sender: 'Human', message: 'Hello', responseId: 'r1' },
+          { sender: 'Assistant', message: 'Hi', responseId: 'r2' },
+        ],
+      },
+      URL,
+      TIMESTAMP
+    )
+
+    expect(records).toHaveLength(2)
+    expect(records.find((r) => r.role === 'user')).toBeDefined()
+    expect(records.find((r) => r.role === 'assistant')).toBeDefined()
+  })
 })
 
 describe('GrokAdapter.parse — invalid inputs', () => {
