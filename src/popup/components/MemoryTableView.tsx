@@ -296,7 +296,7 @@ export function MemoryTableView({
           for (const [sessionId, title] of Object.entries(titlesRecord)) {
             if (title) titlesMap.set(sessionId, title);
           }
-          setTitles(titlesMap);
+          setTitles((prev) => new Map([...prev, ...titlesMap]));
         }
       },
     );
@@ -593,6 +593,7 @@ export function MemoryTableView({
         onClick={() => setSortDesc((prev) => !prev)}
         style={{
           ...S.iconBtn,
+          width: "auto",
           backgroundColor: tk.btnBg,
           borderColor: tk.border,
           color: tk.textMuted,
@@ -700,6 +701,7 @@ export function MemoryTableView({
               style={{
                 marginLeft: "auto",
                 ...S.iconBtn,
+                width: "auto",
                 backgroundColor: tk.btnBg,
                 borderColor: tk.border,
                 color: tk.textMuted,
