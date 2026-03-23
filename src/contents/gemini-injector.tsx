@@ -308,6 +308,7 @@ function sendGeminiDomSync(domMessages: DomMessage[]): void {
 // Tracks which conversations already have an active observer (prevents duplicate observers).
 const _scannedConversations = new Set<string>();
 let _activeContainerObserver: MutationObserver | null = null;
+let _activeSyncCleanup: (() => void) | null = null;
 
 function runDomSync(conversationId: string): void {
   const scroller = document.querySelector(CHAT_CONTAINER_SELECTOR);
@@ -350,7 +351,7 @@ function runDomSync(conversationId: string): void {
  * do we consider the full conversation loaded and run the scan.
  * A hard 15s ceiling prevents the observer from leaking forever.
  */
-function waitForDomAndSync(conversationId: string): void {
+function waitForDomAndSync(conversationId: string): () => void {
   const SETTLE_MS = 600;
   const MAX_WAIT_MS = 15_000;
 
@@ -385,6 +386,13 @@ function waitForDomAndSync(conversationId: string): void {
   if (document.querySelector(CHAT_CONTAINER_SELECTOR)) {
     resetSettle();
   }
+
+  // Return cleanup so maybeSyncConversation can cancel this observer on navigation
+  return () => {
+    syncObserver.disconnect();
+    if (settleTimer) clearTimeout(settleTimer);
+    clearTimeout(hardTimeout);
+  };
 }
 
 /** Tracks containerIds already captured in this page session to avoid re-sending. */
@@ -476,10 +484,12 @@ function maybeSyncConversation(): void {
   const conversationId = extractGeminiConversationId();
   if (!conversationId) return;
   if (_scannedConversations.has(conversationId)) return;
-  // Disconnect old observer before starting new one (SPA navigation cleanup)
+  // Disconnect old observers before starting new ones (SPA navigation cleanup)
   _activeContainerObserver?.disconnect();
   _activeContainerObserver = null;
-  waitForDomAndSync(conversationId);
+  _activeSyncCleanup?.();
+  _activeSyncCleanup = null;
+  _activeSyncCleanup = waitForDomAndSync(conversationId);
   _activeContainerObserver = watchForNewContainers(conversationId);
 }
 
