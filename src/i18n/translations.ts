@@ -90,6 +90,10 @@ export interface Translations {
   importProviderFailed: (name: string, msg: string) => string
   /** Generic: "Invalid file: not a valid {name} export" */
   importProviderInvalidFile: (name: string) => string
+  /** All records already existed — nothing new imported */
+  importProviderAlreadyImported: (name: string) => string
+  /** Some new, some skipped */
+  importProviderSuccessWithSkipped: (name: string, n: number, skipped: number) => string
 
   // Insider email
   insiderTitle: string
@@ -219,6 +223,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ 成功從 ${name} 匯入 ${n} 筆記憶`,
     importProviderFailed: (name, msg) => `✕ ${name} 匯入失敗：${msg}`,
     importProviderInvalidFile: (name) => `無效的檔案：這不是有效的 ${name} 匯出檔`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: '你的 AI 對話，永遠不再消失',
     onboardingStep1Subtitle: 'Personal AI Memory 會在背景自動記住你在 ChatGPT、Claude、Gemini 的每一次對話，讓你隨時找回任何知識。',
     onboardingStep1Btn: '開始使用',
@@ -330,6 +336,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ 成功从 ${name} 导入 ${n} 条记忆`,
     importProviderFailed: (name, msg) => `✕ ${name} 导入失败：${msg}`,
     importProviderInvalidFile: (name) => `无效的文件：这不是有效的 ${name} 导出文件`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: '你的 AI 对话，永远不再消失',
     onboardingStep1Subtitle: 'Personal AI Memory 会在后台自动记住你在 ChatGPT、Claude、Gemini 的每一次对话，让你随时找回任何知识。',
     onboardingStep1Btn: '开始使用',
@@ -441,6 +449,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ Successfully imported ${n} ${n === 1 ? 'memory' : 'memories'} from ${name}`,
     importProviderFailed: (name, msg) => `✕ ${name} import failed: ${msg}`,
     importProviderInvalidFile: (name) => `Invalid file: not a valid ${name} export`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'Your AI conversations, never lost again',
     onboardingStep1Subtitle: 'Personal AI Memory silently captures every conversation on ChatGPT, Claude, and Gemini — so you can find anything, anytime.',
     onboardingStep1Btn: 'Get started',
@@ -552,6 +562,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ ${name} から ${n} 件のメモリをインポートしました`,
     importProviderFailed: (name, msg) => `✕ ${name} インポート失敗：${msg}`,
     importProviderInvalidFile: (name) => `無効なファイル：${name} の有効なエクスポートファイルではありません`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'AI との会話を、永遠に失わない',
     onboardingStep1Subtitle: 'Personal AI Memory が ChatGPT、Claude、Gemini での会話を自動で記録し、いつでも検索できるようにします。',
     onboardingStep1Btn: 'はじめる',
@@ -663,6 +675,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ ${name}에서 메모리 ${n}개를 가져왔습니다`,
     importProviderFailed: (name, msg) => `✕ ${name} 가져오기 실패: ${msg}`,
     importProviderInvalidFile: (name) => `잘못된 파일: 유효한 ${name} 내보내기 파일이 아닙니다`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'AI 대화를 영원히 기억하세요',
     onboardingStep1Subtitle: 'Personal AI Memory가 ChatGPT, Claude, Gemini에서의 모든 대화를 자동으로 기록하여 언제든지 찾을 수 있게 합니다.',
     onboardingStep1Btn: '시작하기',
@@ -776,6 +790,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ ${n} ${n === 1 ? 'memoria importada' : 'memorias importadas'} de ${name}`,
     importProviderFailed: (name, msg) => `✕ Error al importar ${name}: ${msg}`,
     importProviderInvalidFile: (name) => `Archivo inválido: no es un archivo de exportación de ${name} válido`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'Tus conversaciones de IA, nunca más perdidas',
     onboardingStep1Subtitle: 'Personal AI Memory captura automáticamente cada conversación en ChatGPT, Claude y Gemini para que puedas encontrar cualquier cosa en cualquier momento.',
     onboardingStep1Btn: 'Comenzar',
@@ -889,6 +905,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ ${n} souvenir${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''} depuis ${name}`,
     importProviderFailed: (name, msg) => `✕ Échec de l'import ${name} : ${msg}`,
     importProviderInvalidFile: (name) => `Fichier invalide : ce n'est pas un fichier d'export ${name} valide`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'Vos conversations IA, plus jamais perdues',
     onboardingStep1Subtitle: 'Personal AI Memory capture automatiquement chaque conversation sur ChatGPT, Claude et Gemini pour que vous puissiez tout retrouver, à tout moment.',
     onboardingStep1Btn: 'Commencer',
@@ -1002,6 +1020,8 @@ export const translations: Record<LangCode, Translations> = {
     importProviderSuccess: (name, n) => `✓ ${n} Erinnerung${n !== 1 ? 'en' : ''} aus ${name} importiert`,
     importProviderFailed: (name, msg) => `✕ ${name}-Import fehlgeschlagen: ${msg}`,
     importProviderInvalidFile: (name) => `Ungültige Datei: kein gültiger ${name}-Export`,
+    importProviderAlreadyImported: (name) => `${name}: all conversations already imported`,
+    importProviderSuccessWithSkipped: (name, n, skipped) => `${name}: imported ${n}, skipped ${skipped} already imported`,
     onboardingStep1Title: 'Ihre KI-Gespräche — nie wieder verloren',
     onboardingStep1Subtitle: 'Personal AI Memory zeichnet automatisch jedes Gespräch auf ChatGPT, Claude und Gemini auf, damit Sie jederzeit alles wiederfinden.',
     onboardingStep1Btn: 'Loslegen',
