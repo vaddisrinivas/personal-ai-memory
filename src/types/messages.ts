@@ -256,7 +256,7 @@ export interface DomSyncRequest {
   type: 'DOM_SYNC'
   payload: {
     messages: DomMessage[]
-    provider: 'openai'
+    provider: 'openai' | 'google'
     url: string
   }
 }
