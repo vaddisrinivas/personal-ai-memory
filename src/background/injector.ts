@@ -1693,10 +1693,6 @@ export function mainWorldInterceptor(): void {
 
     const OriginalXHR = window.XMLHttpRequest;
 
-    // Debounce Gemini XHR captures: Gemini sends multiple XHR responses during streaming
-    // (each with the cumulative text so far). We only want to store the final complete response.
-    const _geminiCaptureTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
     class InterceptedXMLHttpRequest extends OriginalXHR {
       private _url = "";
       private _method = "";
@@ -1727,48 +1723,12 @@ export function mainWorldInterceptor(): void {
 
       send(body?: Document | XMLHttpRequestBodyInit | null): void {
         const provider = detectProvider(this._url);
-        const isGeminiStream = isGeminiStreamGenerateUrl(this._url);
 
+        // Gemini now uses DOM-based capture via gemini-injector.tsx; skip XHR interception
         if (
-          isGeminiStream &&
-          this._method.toUpperCase() === "POST" &&
-          body != null
-        ) {
-          let bodyText: string | null = null;
-          if (typeof body === "string") {
-            bodyText = body;
-          } else if (
-            typeof body === "object" &&
-            body !== null &&
-            typeof (body as FormData).get === "function"
-          ) {
-            const fd = body as FormData;
-            const fReq = fd.get("f.req");
-            if (fReq != null && typeof fReq === "string")
-              bodyText = "f.req=" + encodeURIComponent(fReq);
-          }
-          const geminiUser = bodyText
-            ? extractGeminiRequestUserMessage(bodyText)
-            : null;
-          if (geminiUser?.text) {
-            this._timestamp = Date.now();
-            const payload: Record<string, unknown> = {
-              role: "user",
-              content: geminiUser.text,
-              isPartial: false,
-            };
-            if (geminiUser.conversationId)
-              payload["conversationId"] = geminiUser.conversationId;
-            sendCapture("google", payload, this._url, this._timestamp);
-          }
-        }
-
-        const isGeminiUrl = isGeminiStreamGenerateUrl(this._url);
-        if (
-          isGeminiUrl ||
-          (provider &&
-            isApiEndpoint(this._url) &&
-            isConversationCaptureUrl(this._url, provider))
+          provider &&
+          isApiEndpoint(this._url) &&
+          isConversationCaptureUrl(this._url, provider)
         ) {
           if (!this._timestamp) this._timestamp = Date.now();
           this.addEventListener("load", () => {
@@ -1776,36 +1736,7 @@ export function mainWorldInterceptor(): void {
               const contentType = (
                 this.getResponseHeader("content-type") ?? ""
               ).toLowerCase();
-              if (isGeminiUrl) {
-                const raw =
-                  typeof this.responseText === "string"
-                    ? this.responseText
-                    : "";
-                const { lastAssistantText, conversationId } =
-                  parseGeminiBardResponseText(raw);
-                if (lastAssistantText) {
-                  const payload: Record<string, unknown> = {
-                    role: "assistant",
-                    content: lastAssistantText,
-                    isPartial: false,
-                  };
-                  if (conversationId)
-                    payload["conversationId"] = conversationId;
-                  // Debounce: Gemini streams via multiple XHR requests; only capture the last one.
-                  const debounceKey = (conversationId || this._url) as string;
-                  const existing = _geminiCaptureTimers.get(debounceKey);
-                  if (existing) clearTimeout(existing);
-                  const captureUrl = this._url;
-                  const captureTs = this._timestamp;
-                  _geminiCaptureTimers.set(
-                    debounceKey,
-                    setTimeout(() => {
-                      _geminiCaptureTimers.delete(debounceKey);
-                      sendCapture("google", payload, captureUrl, captureTs);
-                    }, 1000),
-                  );
-                }
-              } else if (contentType.includes("application/json") && provider) {
+              if (contentType.includes("application/json") && provider) {
                 const data = JSON.parse(this.responseText as string) as unknown;
                 sendCapture(provider, data, this._url, this._timestamp);
               }

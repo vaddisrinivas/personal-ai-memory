@@ -4,6 +4,7 @@ import type {
   ErrorLog,
   MemoryRecord,
 } from "../types/memory";
+import { normalizeContent } from "./adapters/base";
 
 export class MemoryDatabase extends Dexie {
   memories!: Table<MemoryRecord, string>;
@@ -252,6 +253,20 @@ export class MemoryDatabase extends Dexie {
       }
     }
     return messageIds.filter((mid) => !foundSet.has(mid));
+  }
+
+  /**
+   * Returns the set of content strings for all non-deleted records in a session.
+   * Used by DOM sync to detect migration duplicates (XHR records have random UUIDs
+   * that ID-based dedup cannot match against new DOM-derived stable IDs).
+   */
+  async getSessionContentSet(sessionId: string): Promise<Set<string>> {
+    const records = await this.memories
+      .where('sessionId')
+      .equals(sessionId)
+      .filter((r) => !r.isDeleted)
+      .toArray()
+    return new Set(records.map((r) => normalizeContent(r.content)))
   }
 }
 

@@ -33,7 +33,6 @@ export class GeminiAdapter implements IAdapter {
   private static readonly HANDLED_PATTERNS = [
     'generativelanguage.googleapis.com',
     'gemini.google.com/_/BardChatUi',
-    'gemini.google.com/dom-sync',
   ]
 
   canHandle(url: string): boolean {
