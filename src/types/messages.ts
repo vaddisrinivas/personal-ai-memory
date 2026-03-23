@@ -210,6 +210,7 @@ export interface ImportMemoriesResponse {
   payload: {
     success: boolean
     count: number
+    skipped?: number
     error?: string
   }
 }
