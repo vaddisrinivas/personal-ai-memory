@@ -115,8 +115,9 @@ const BEFORE_BUTTON_SELECTORS = [
   'button[aria-label="送信"]',
 ];
 
-// Dictate button — used as fallback anchor to insert after.
+// Dictate button — used as anchor to insert before (recall goes left of dictation).
 const MIC_BUTTON_SELECTORS = [
+  'button[aria-label^="Dictation"]',        // "Dictation (^D)" and variants
   'button[aria-label="Dictate button"]',
   '[data-testid="composer-speech-button"]',
   '[data-testid="voice-input-button"]',
@@ -179,7 +180,8 @@ function findInsertionPoint(): {
     }
   }
 
-  // Strategy 3: insert after the Dictate button's slot in the flex row
+  // Strategy 3: insert before the Dictate button's slot in the flex row
+  // (recall button goes to the LEFT of the dictation button)
   for (const sel of MIC_BUTTON_SELECTORS) {
     const mic = document.querySelector<HTMLElement>(sel);
     if (mic) {
@@ -187,7 +189,7 @@ function findInsertionPoint(): {
       if (result) {
         return {
           container: result.container,
-          before: result.slotEl.nextElementSibling as HTMLElement | null,
+          before: result.slotEl,
         };
       }
     }

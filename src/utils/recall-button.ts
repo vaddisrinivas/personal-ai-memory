@@ -30,6 +30,20 @@ export function createRecallButton(opts: RecallButtonOptions): HTMLElement {
   input.title = "Number of memories to recall";
   Object.assign(input.style, RECALL_INPUT_STYLE);
 
+  // Hide number input spinners consistently across all sites.
+  // Inline styles can't target pseudo-elements, so inject a <style> tag.
+  const spinnerStyleId = `${opts.inputId}-spinner-style`;
+  if (!document.getElementById(spinnerStyleId)) {
+    const style = document.createElement("style");
+    style.id = spinnerStyleId;
+    style.textContent = `
+      #${opts.inputId}::-webkit-inner-spin-button,
+      #${opts.inputId}::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      #${opts.inputId} { -moz-appearance: textfield; appearance: textfield; }
+    `;
+    document.head.appendChild(style);
+  }
+
   chrome.storage.local.get([STORAGE_KEY], (res) => {
     input.value = String(res[STORAGE_KEY] ?? defaultTopK);
   });
@@ -44,6 +58,11 @@ export function createRecallButton(opts: RecallButtonOptions): HTMLElement {
   });
 
   input.addEventListener("keydown", (e) => e.stopPropagation());
+  input.addEventListener("mousedown", (e) => e.stopPropagation());
+  input.addEventListener("click", (e) => {
+    e.stopPropagation();
+    input.focus();
+  });
 
   const btn = document.createElement("button");
   btn.id = opts.buttonId;
