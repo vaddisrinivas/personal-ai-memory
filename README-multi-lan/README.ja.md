@@ -300,47 +300,7 @@ pnpm test:e2e          # E2E テスト（Playwright — 事前にビルドが必
 
 ## 更新履歴
 
-### v0.0.6 — 2026-03-15
-- **修正：** テーマ切替が全開いているタブに即時同期 — 以前は現在のタブのみ更新されていた
-- **修正：** 言語切替が全開いているタブに即時同期 — 以前はページ再読み込みが必要だった
-- **修正：** フローティングパネルの状態（開閉・表示中ビュー）がページ再読み込み・サイト内遷移後も保持 — 以前は毎回フローティングボタンにリセットされていた
-- **リファクタ：** MainMenuView を MemoryMenuContent に置換 — メモリメニュー内容を専用コンポーネントに集約し、サイドバーとポップアップで共有
-- **リファクタ：** FloatingMemoryPanel を `src/ui/memory-panel/` から `src/popup/components/` へ移動し、ポップアップ UI を一つのツリーに統一
-- **リファクタ：** インポーターを `src/popup/components/importers/` から `src/importers/` へ移動して責務を分離
-- **リファクタ：** 共通 `chrome.storage` ユーティリティ（`loadFromChrome`、`saveToChrome`、`subscribeChromeStorage`）を `src/utils/chrome-storage.ts` に抽出 — テーマ・言語コンテキストで共有
-- **リファクタ：** バックグラウンド処理を専用モジュールに分割：`chunking.ts`、`domSync.ts`、`offscreen.ts`、`perplexityBgFetch.ts`
-- **リファクタ：** RAG プロンプト整形と Recall ロジックを `src/utils/rag.ts`、`src/utils/recall-button.ts`、`src/utils/recall-helpers.ts` に抽出
-
-### v0.0.5 — 2026-03-12
-- **修正：** Gemini パッシブキャプチャが最新の DOM セレクター（`<user-query>` / `<message-content>`）を使用するよう更新 — Gemini フロントエンド更新後に会話がサイレントに欠落していた問題を解消。
-- **修正：** Gemini の重複キャプチャを排除 — 安定した決定論的 Record ID と XHR デバウンス（1 秒）により、ページリロード時やストリーミング中の重複保存を防止。
-- **修正：** Recall ボタンが入力欄が空の場合や記憶がすでに注入済みの場合に明確なアラートを表示 — 全プラットフォーム（ChatGPT・Claude・Gemini・Grok・Perplexity）での誤った二重注入を防止。
-- **修正：** 保存前に Recall 注入の `[System Context]` テンプレートを自動除去 — 実際のユーザークエリのみを記憶に保存。
-- **修正：** Perplexity Recall ボタンが「モデルを選択」ボタンの直後に正しく表示されるよう修正。
-- **修正：** Gemini の会話タイトルを `document.title` ではなくサイドバー項目から取得するよう変更 — セッション名がより正確に。
-- **修正：** Gemini テキスト注入ロジックを書き直し、入力処理の安定性を向上。
-- **修正：** Grok 入力検出を改善 — 「入力が空」の誤検出を解消。
-- **修正：** Gemini・ChatGPT セッションの記憶リスト重複除去を改善。
-- **改善：** Recall ボタンのアラートが拡張機能の表示言語に合わせて表示されるよう変更。
-
-### v0.0.4 — 2026-03-06
-- **新機能：** Grok（`grok.com`）対応 — 閲覧中に会話をサイレントキャプチャ。
-- **新機能：** Gemini パッシブメッセージキャプチャ — ページを開くだけで既存の会話が自動的にキャプチャされます。
-
-### v0.0.3 — 2026-03-02
-- Perplexity（`perplexity.ai`）対応 — 閲覧中に会話をサイレントキャプチャ。注意：Perplexity はユーザーデータのエクスポートに対応していないため、各会話を個別に開く必要があります。
-
-### v0.0.2 — 2026-03-01
-- Claude ウェブ版（`claude.ai`）への完全対応 — 会話キャプチャ、Recall ボタン注入、フローティングメモリパネルが Claude で利用可能に
-
-### v0.0.1 — 初回リリース
-- ChatGPT・Gemini の会話キャプチャ
-- ベクトル + BM25 ハイブリッド検索（RRF 融合）
-- ワンクリック Recall ボタン（ChatGPT）
-- お気に入りプロンプト（Trie オートコンプリート、ドラッグ＆ドロップフォルダ）
-- JSON バックアップ エクスポート / インポート
-- フローティングメモリパネル
-- 8 言語 UI、ダーク / ライトテーマ
+完全なバージョン履歴は [CHANGELOG.md](../CHANGELOG.md) をご覧ください。
 
 ---
 

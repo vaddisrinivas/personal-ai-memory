@@ -300,47 +300,7 @@ pnpm test:e2e          # E2E 测试（Playwright — 需先 build）
 
 ## 更新日志
 
-### v0.0.6 — 2026-03-15
-- **修复：** 主题切换现在会即时同步到所有已打开标签页 — 此前仅当前标签页会更新
-- **修复：** 语言切换现在会即时同步到所有已打开标签页 — 此前需刷新页面才会生效
-- **修复：** 浮动面板状态（开/关、当前视图）现在在刷新与站内导航后会保留 — 此前每次加载都会还原为浮动按钮
-- **重构：** 以 MemoryMenuContent 取代 MainMenuView — 记忆菜单内容改由独立组件提供，侧边栏与弹窗共用
-- **重构：** 将 FloatingMemoryPanel 自 `src/ui/memory-panel/` 移至 `src/popup/components/`，统一弹窗 UI 结构
-- **重构：** 导入器自 `src/popup/components/importers/` 移至 `src/importers/` 以理清分层
-- **重构：** 将共用 `chrome.storage` 工具（`loadFromChrome`、`saveToChrome`、`subscribeChromeStorage`）抽出至 `src/utils/chrome-storage.ts`，供主题与语言 context 使用
-- **重构：** 后台处理拆成独立模块：`chunking.ts`、`domSync.ts`、`offscreen.ts`、`perplexityBgFetch.ts`
-- **重构：** RAG prompt 格式化与 Recall 逻辑抽出至 `src/utils/rag.ts`、`src/utils/recall-button.ts`、`src/utils/recall-helpers.ts`
-
-### v0.0.5 — 2026-03-12
-- **修复：** Gemini 被动捕获改用最新 DOM 选择器（`<user-query>` / `<message-content>`）以适应 Gemini 界面更新 — 旧版选择器已失效，导致对话静默遗漏。
-- **修复：** 消除 Gemini 重复捕获问题 — 稳定的确定性 Record ID 配合 XHR debounce（1 秒）防止页面重载或流式传输中途重复存储同一对话。
-- **修复：** Recall 按钮现在在输入框为空或已注入记忆时显示明确提示 — 防止所有平台（ChatGPT、Claude、Gemini、Grok、Perplexity）误触重复注入。
-- **修复：** 保存前自动过滤 Recall 注入的 `[System Context]` 模板 — 只保留真正的用户问题。
-- **修复：** Perplexity Recall 按钮现在正确显示在"选择模型"按钮旁（位置修正）。
-- **修复：** Gemini 对话标题改从侧边栏项目读取，不再依赖 `document.title`，Session 名称更准确。
-- **修复：** Gemini 文字注入逻辑改写，输入处理更稳定。
-- **修复：** Grok 输入检测改善 — 不再出现误判「输入为空」的提示。
-- **修复：** 记忆列表去重改善，解决 Gemini 与 ChatGPT 的重复条目问题。
-- **改善：** Recall 按钮提示消息现在跟随扩展的显示语言。
-
-### v0.0.4 — 2026-03-06
-- **新功能：** 支持 Grok（`grok.com`）— 浏览时静默捕捉对话。
-- **新功能：** Gemini 被动消息捕获 — 进入页面时，自动抓取页面上已有的对话记录。
-
-### v0.0.3 — 2026-03-02
-- 支持 Perplexity（`perplexity.ai`）— 浏览时静默捕捉对话。注意：Perplexity 不支持用户数据导出，因此必须逐一点击对话才能收集记录。
-
-### v0.0.2 — 2026-03-01
-- 完整支持 Claude 网页版（`claude.ai`）— 对话捕获、Recall 按钮注入、浮动记忆面板现已在 Claude 上可用
-
-### v0.0.1 — 初始版本
-- ChatGPT 与 Gemini 对话捕获
-- 向量 + BM25 混合搜索（RRF 融合）
-- 一键 Recall 按钮（ChatGPT）
-- 常用 Prompt（Trie 自动建议、拖拽文件夹）
-- JSON 备份导出 / 导入
-- 浮动记忆面板
-- 8 种语言、深色 / 浅色主题
+请参阅 [CHANGELOG.md](../CHANGELOG.md) 获取完整的版本历史。
 
 
 ---
