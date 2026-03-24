@@ -19,8 +19,8 @@ describe('GeminiAdapter.canHandle', () => {
     ).toBe(true)
   })
 
-  it('matches gemini.google.com/dom-sync URL', () => {
-    expect(adapter.canHandle('https://gemini.google.com/dom-sync')).toBe(true)
+  it('does not match gemini.google.com/dom-sync URL (route removed; injector now uses DOM_SYNC directly)', () => {
+    expect(adapter.canHandle('https://gemini.google.com/dom-sync')).toBe(false)
   })
 
   it('does not match claude.ai URL', () => {

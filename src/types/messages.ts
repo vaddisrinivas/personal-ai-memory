@@ -76,6 +76,7 @@ export interface QueryRecordsRequest {
       startTime?: number
       endTime?: number
       limit?: number
+      offset?: number
     }
   }
 }
@@ -209,6 +210,7 @@ export interface ImportMemoriesResponse {
   payload: {
     success: boolean
     count: number
+    skipped?: number
     error?: string
   }
 }
@@ -254,7 +256,7 @@ export interface DomSyncRequest {
   type: 'DOM_SYNC'
   payload: {
     messages: DomMessage[]
-    provider: 'openai'
+    provider: 'openai' | 'google'
     url: string
   }
 }

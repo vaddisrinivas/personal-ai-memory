@@ -302,47 +302,7 @@ pnpm test:e2e          # Tests E2E (Playwright — exécuter pnpm build d'abord)
 
 ## Journal des modifications
 
-### v0.0.6 — 2026-03-15
-- **Correctif :** Les changements de thème se synchronisent désormais instantanément sur tous les onglets ouverts — auparavant seul l'onglet actif se mettait à jour
-- **Correctif :** Les changements de langue se synchronisent désormais instantanément sur tous les onglets ouverts — auparavant un rechargement de page était nécessaire
-- **Correctif :** L'état du panneau flottant (ouvert/fermé, vue active) persiste après rechargement et navigation — auparavant il revenait au bouton flottant à chaque chargement
-- **Refactor :** Remplacement de MainMenuView par MemoryMenuContent — le contenu du menu mémoire est géré par un composant dédié partagé entre barre latérale et popup
-- **Refactor :** Déplacement de FloatingMemoryPanel de `src/ui/memory-panel/` vers `src/popup/components/` pour un arbre UI popup unique
-- **Refactor :** Déplacement des importateurs de `src/popup/components/importers/` vers `src/importers/` pour une séparation plus claire
-- **Refactor :** Utilités partagées `chrome.storage` (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) extraites dans `src/utils/chrome-storage.ts` — utilisées par les contextes thème et langue
-- **Refactor :** Traitement en arrière-plan extrait dans des modules dédiés : `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
-- **Refactor :** Formatage des prompts RAG et logique Recall extraits dans `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`
-
-### v0.0.5 — 2026-03-12
-- **Correctif :** La capture passive Gemini utilise désormais des sélecteurs DOM mis à jour (`<user-query>` / `<message-content>`) correspondant à l'interface actuelle de Gemini — les conversations étaient silencieusement manquées après une mise à jour du frontend.
-- **Correctif :** Capture en double Gemini éliminée — des IDs de record stables déterministes et un debounce XHR (1 s) empêchent le même contenu d'être réenregistré lors du rechargement ou en cours de streaming.
-- **Correctif :** Le bouton Recall affiche désormais une alerte claire si le champ est vide ou si des souvenirs ont déjà été injectés — évite la double injection accidentelle sur toutes les plateformes (ChatGPT, Claude, Gemini, Grok, Perplexity).
-- **Correctif :** Le modèle `[System Context]` injecté par Recall est supprimé avant l'enregistrement — seule la vraie requête de l'utilisateur est conservée en mémoire.
-- **Correctif :** Le bouton Recall de Perplexity s'affiche maintenant correctement juste après le bouton « Choisir un modèle ».
-- **Correctif :** Le titre de conversation Gemini est maintenant lu depuis l'élément de la barre latérale plutôt que depuis `document.title` pour des noms de session plus précis.
-- **Correctif :** La logique d'injection de texte Gemini a été réécrite pour une gestion des entrées plus fiable.
-- **Correctif :** La détection de saisie Grok est améliorée — plus de fausses erreurs « champ vide ».
-- **Correctif :** La déduplication de la liste de mémoire est améliorée pour les sessions Gemini et ChatGPT.
-- **Amélioration :** Les alertes du bouton Recall suivent désormais la langue d'affichage de l'extension.
-
-### v0.0.4 — 2026-03-06
-- **Nouveau :** Support de Grok (`grok.com`) — les conversations sont capturées silencieusement pendant la navigation.
-- **Nouveau :** Capture passive des messages Gemini — les conversations existantes sur la page sont automatiquement capturées lors de la visite.
-
-### v0.0.3 — 2026-03-02
-- Support de Perplexity (`perplexity.ai`) — les conversations sont capturées silencieusement pendant la navigation. Remarque : Perplexity ne prend pas en charge l'export de données utilisateur, chaque conversation doit donc être ouverte individuellement pour être collectée.
-
-### v0.0.2 — 2026-03-01
-- Support complet de Claude web (`claude.ai`) — capture de conversations, injection du bouton Recall et panneau mémoire flottant fonctionnent désormais sur Claude
-
-### v0.0.1 — Version initiale
-- Capture de conversations ChatGPT et Gemini
-- Recherche hybride vecteur + BM25 avec fusion RRF
-- Bouton Recall en un clic (ChatGPT)
-- Prompts favoris avec autocomplétion Trie et dossiers glisser-déposer
-- Export / import de sauvegarde JSON
-- Panneau mémoire flottant
-- 8 langues d'interface, thème sombre / clair
+Voir [CHANGELOG.md](../CHANGELOG.md) pour l'historique complet des versions.
 
 ---
 

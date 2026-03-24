@@ -89,7 +89,7 @@ export class GrokAdapter implements IAdapter {
       const r = responses[i]
       if (r['isControl']) continue
 
-      const sender = r['sender'] as string
+      const sender = (r['sender'] as string | undefined ?? '').toLowerCase()
       if (sender !== 'human' && sender !== 'assistant') continue
 
       const message = r['message'] as string | undefined

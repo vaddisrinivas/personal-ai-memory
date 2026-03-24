@@ -50,16 +50,22 @@ export function ImportView({ onImported }: ImportViewProps) {
     }
   }, [menuOpen])
 
-  async function sendRecordsToBackground(records: SerializableMemoryRecord[]): Promise<number> {
+  async function sendRecordsToBackground(
+    records: SerializableMemoryRecord[],
+  ): Promise<{ count: number; skipped: number }> {
     const resp = await new Promise<ImportMemoriesResponse>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'IMPORT_MEMORIES', payload: { records } }, (r: ImportMemoriesResponse | undefined) => {
-        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message))
-        if (!r) return reject(new Error('No response from background'))
-        resolve(r)
-      })
+      chrome.runtime.sendMessage(
+        { type: 'IMPORT_MEMORIES', payload: { records } },
+        (r: ImportMemoriesResponse | undefined) => {
+          if (chrome.runtime.lastError)
+            return reject(new Error(chrome.runtime.lastError.message))
+          if (!r) return reject(new Error('No response from background'))
+          resolve(r)
+        },
+      )
     })
     if (!resp.payload.success) throw new Error(resp.payload.error ?? '寫入失敗')
-    return resp.payload.count
+    return { count: resp.payload.count, skipped: resp.payload.skipped ?? 0 }
   }
 
   // ── Backup file handler (AI Memory backup format) ───────────────────────────
@@ -120,8 +126,16 @@ export function ImportView({ onImported }: ImportViewProps) {
         if (!importer.canHandle(raw)) throw new Error(t.importProviderInvalidFile(importer.displayName))
         const records = importer.parse(raw)
         if (records.length === 0) throw new Error(t.importProviderInvalidFile(importer.displayName))
-        const count = await sendRecordsToBackground(records)
-        setStatus({ type: 'success', msg: t.importProviderSuccess(importer.displayName, count) })
+        const { count, skipped } = await sendRecordsToBackground(records)
+        let successMsg: string
+        if (count === 0 && skipped > 0) {
+          successMsg = t.importProviderAlreadyImported(importer.displayName)
+        } else if (skipped > 0) {
+          successMsg = t.importProviderSuccessWithSkipped(importer.displayName, count, skipped)
+        } else {
+          successMsg = t.importProviderSuccess(importer.displayName, count)
+        }
+        setStatus({ type: 'success', msg: successMsg })
         setTimeout(() => setStatus({ type: 'idle' }), 3000)
         setMenuOpen(false)
         onImported?.()

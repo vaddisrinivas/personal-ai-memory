@@ -301,47 +301,7 @@ pnpm test:e2e          # Pruebas E2E (Playwright — ejecutar pnpm build primero
 
 ## Historial de cambios
 
-### v0.0.6 — 2026-03-15
-- **Corrección:** Los cambios de tema ahora se sincronizan al instante en todas las pestañas abiertas — antes solo se actualizaba la pestaña actual al cambiar modo claro/oscuro
-- **Corrección:** Los cambios de idioma ahora se sincronizan al instante en todas las pestañas abiertas — antes hacía falta recargar la página para aplicarlos
-- **Corrección:** El estado del panel flotante (abierto/cerrado, vista activa) ahora persiste tras recargar y navegar — antes se restablecía al botón flotante en cada carga
-- **Refactor:** Sustitución de MainMenuView por MemoryMenuContent — el contenido del menú de memoria pasa a un componente dedicado usado por barra lateral y popup
-- **Refactor:** FloatingMemoryPanel movido de `src/ui/memory-panel/` a `src/popup/components/` para un único árbol de UI del popup
-- **Refactor:** Importadores movidos de `src/popup/components/importers/` a `src/importers/` para separación más clara
-- **Refactor:** Utilidades compartidas de `chrome.storage` (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) extraídas a `src/utils/chrome-storage.ts` — usadas por contexto de tema e idioma
-- **Refactor:** Procesamiento en segundo plano extraído a módulos dedicados: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
-- **Refactor:** Formateo de prompts RAG y lógica Recall extraídos a `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts`
-
-### v0.0.5 — 2026-03-12
-- **Corrección:** La captura pasiva de Gemini ahora usa selectores DOM actualizados (`<user-query>` / `<message-content>`) compatibles con la interfaz actual de Gemini — las conversaciones se perdían silenciosamente tras una actualización del frontend.
-- **Corrección:** Eliminada la captura duplicada de Gemini — IDs de registro deterministas estables y debounce XHR (1 s) evitan almacenar la misma conversación al recargar la página o durante el streaming.
-- **Corrección:** El botón Recall ahora muestra una alerta clara si el campo está vacío o los recuerdos ya se han inyectado — evita la doble inyección accidental en todas las plataformas (ChatGPT, Claude, Gemini, Grok, Perplexity).
-- **Corrección:** La plantilla `[System Context]` inyectada por Recall se elimina antes de guardar — solo se almacena la consulta real del usuario.
-- **Corrección:** El botón Recall de Perplexity ahora aparece correctamente junto al botón "Elegir modelo".
-- **Corrección:** El título de conversación de Gemini ahora se lee desde el elemento de la barra lateral en lugar de `document.title` para nombres de sesión más precisos.
-- **Corrección:** La inyección de texto de Gemini fue reescrita para un manejo de entrada más confiable.
-- **Corrección:** Detección de entrada de Grok mejorada — sin más errores falsos de "entrada vacía".
-- **Corrección:** Deduplicación de la lista de memoria mejorada para sesiones de Gemini y ChatGPT.
-- **Mejora:** Las alertas del botón Recall ahora siguen el idioma de visualización de la extensión.
-
-### v0.0.4 — 2026-03-06
-- **Nuevo:** Soporte para Grok (`grok.com`) — las conversaciones se capturan silenciosamente mientras navegas.
-- **Nuevo:** Captura pasiva de mensajes de Gemini — las conversaciones existentes en la página se capturan automáticamente al visitar.
-
-### v0.0.3 — 2026-03-02
-- Soporte para Perplexity (`perplexity.ai`) — las conversaciones se capturan silenciosamente mientras navegas. Nota: Perplexity no admite exportación de datos, por lo que cada conversación debe abrirse individualmente para ser recopilada.
-
-### v0.0.2 — 2026-03-01
-- Soporte completo para Claude web (`claude.ai`) — captura de conversaciones, inyección del botón Recall y panel flotante de memoria ahora funcionan en Claude
-
-### v0.0.1 — Lanzamiento inicial
-- Captura de conversaciones de ChatGPT y Gemini
-- Búsqueda híbrida vector + BM25 con fusión RRF
-- Botón Recall con un clic (ChatGPT)
-- Prompts favoritos con autocompletado Trie y carpetas drag-and-drop
-- Exportación / importación de copia de seguridad JSON
-- Panel flotante de memoria
-- 8 idiomas de UI, tema oscuro / claro
+Consulta [CHANGELOG.md](../CHANGELOG.md) para el historial completo de versiones.
 
 ---
 

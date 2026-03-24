@@ -13,6 +13,7 @@ import type { PlasmoCSConfig } from "plasmo";
 import { watchOnboardingStep3 } from "../utils/onboarding-highlight";
 import { handleRecallClick as sharedHandleRecallClick } from "../utils/recall-helpers";
 import { createRecallButton as sharedCreateRecallButton } from "../utils/recall-button";
+import type { DomMessage } from "../types/messages";
 
 export const config: PlasmoCSConfig = {
   matches: ["https://gemini.google.com/*"],
@@ -184,32 +185,25 @@ function tryInjectButton(): void {
 }
 
 // ─── DOM Conversation Scraper ─────────────────────────────────────────────────
-// Captures historical messages already rendered in the DOM (i.e. when a user
-// opens an existing Gemini conversation). Sends them via window.postMessage in
-// the same format as the network interceptor so the isolated content script
-// (interceptor.ts) can forward them to the background.
+// Captures messages rendered in the Gemini DOM and sends them via DOM_SYNC to
+// the background service worker.
 //
 // Gemini DOM structure (as of 2026):
 //
-//   User turn:
-//     <user-query>
-//       …
-//       <p class="query-text-line ng-star-inserted">…</p>  ← one per text line
-//       …
-//     </user-query>
-//
-//   Assistant turn:
-//     <message-content>
-//       <div class="inline-copy-host">
-//         <div class="markdown markdown-main-panel …">…</div>
-//       </div>
-//     </message-content>
-//
-// querySelectorAll('user-query, message-content') returns both element types in
-// document order, giving us the interleaved conversation sequence for free.
-
-const POST_TYPE = "__ai_memory_capture__";
-const DOM_SYNC_URL = "https://gemini.google.com/dom-sync";
+//   <infinite-scroller data-test-id="chat-history-container">
+//     <div id="{numericContainerId}">                        ← one per turn pair
+//       <user-query>
+//         <p class="query-text-line">User text</p>
+//       </user-query>
+//       <model-response>
+//         <message-content id="message-content-id-r_{numericContainerId}">
+//           <div id="model-response-message-contentr_{numericContainerId}">
+//             <p data-path-to-node="0">…</p>
+//           </div>
+//         </message-content>
+//       </model-response>
+//     </div>
+//   </infinite-scroller>
 
 /** Extract the Gemini conversation ID from the current URL.
  *  URL pattern: https://gemini.google.com/app/<conversationId>
@@ -219,91 +213,133 @@ function extractGeminiConversationId(): string | null {
   return m ? m[1] : null;
 }
 
-interface ScrapedTurn {
+/** Selectors for the new Gemini DOM structure */
+const CHAT_CONTAINER_SELECTOR =
+  'infinite-scroller[data-test-id="chat-history-container"]';
+const USER_TEXT_SELECTOR = "p.query-text-line";
+const RESPONSE_DIV_SELECTOR = 'div[id^="model-response-message-contentr_"]';
+
+interface GeminiMessage {
+  messageId: string;
   role: "user" | "assistant";
   content: string;
+  turnIndex: number;
+  containerId: string;
 }
 
 /**
- * Walk the DOM in document order and collect all conversation turns.
- * Uses the custom elements <user-query> and <message-content> as stable turn
- * boundaries — no marker sorting needed since querySelectorAll preserves DOM order.
+ * Extract all messages from a single turn container div.
+ * Returns [] if container is not yet fully rendered.
  */
-function scrapeConversationTurns(): ScrapedTurn[] {
-  const turns: ScrapedTurn[] = [];
+function extractContainerMessages(
+  container: Element,
+  turnIndex: number,
+): GeminiMessage[] {
+  const containerId = container.id;
+  if (!containerId) return [];
 
-  const els = document.querySelectorAll<Element>("user-query, message-content");
+  const messages: GeminiMessage[] = [];
 
-  for (const el of els) {
-    if (el.tagName.toLowerCase() === "user-query") {
-      // Collect all text lines from the user bubble
-      const lines = el.querySelectorAll<HTMLElement>("p.query-text-line");
-      if (lines.length > 0) {
-        const content = Array.from(lines)
-          .map((p) => p.innerText?.trim() ?? "")
-          .filter(Boolean)
-          .join("\n");
-        if (content) turns.push({ role: "user", content });
-      }
-    } else {
-      // message-content: grab the rendered markdown panel
-      const md = el.querySelector<HTMLElement>(".markdown.markdown-main-panel");
-      if (md) {
-        const content = md.innerText?.trim() ?? "";
-        if (content) turns.push({ role: "assistant", content });
-      }
+  // User message
+  const userLines = container.querySelectorAll<HTMLElement>(USER_TEXT_SELECTOR);
+  if (userLines.length > 0) {
+    const content = Array.from(userLines)
+      .map((p) => p.innerText?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n");
+    if (content) {
+      messages.push({
+        messageId: `${containerId}-u`,
+        role: "user",
+        content,
+        turnIndex: turnIndex * 2,
+        containerId,
+      });
     }
   }
 
-  return turns;
+  // Assistant message
+  const responseDiv =
+    container.querySelector<HTMLElement>(RESPONSE_DIV_SELECTOR);
+  if (responseDiv) {
+    const content = responseDiv.innerText?.trim() ?? "";
+    if (content) {
+      messages.push({
+        messageId: responseDiv.id || `${containerId}-a`,
+        role: "assistant",
+        content,
+        turnIndex: turnIndex * 2 + 1,
+        containerId,
+      });
+    }
+  }
+
+  return messages;
+}
+
+function getPageTitle(): string {
+  const el = document.querySelector<HTMLElement>(
+    '[aria-current="true"][data-test-id="conversation"] div',
+  );
+  return el?.textContent?.trim() ?? document.title?.trim() ?? "";
+}
+
+function sendGeminiDomSync(domMessages: DomMessage[]): void {
+  if (!domMessages.length) return;
+  chrome.runtime.sendMessage(
+    {
+      type: "DOM_SYNC",
+      payload: {
+        messages: domMessages,
+        provider: "google",
+        url: window.location.href,
+      },
+    },
+    () => {
+      try {
+        void chrome.runtime.lastError;
+      } catch {
+        /* ignore */
+      }
+    },
+  );
 }
 
 // Tracks which conversations already have an active observer (prevents duplicate observers).
 const _scannedConversations = new Set<string>();
-// Tracks content keys already sent per conversation (prevents re-sending within one page session).
-const _sentContent = new Map<string, Set<string>>();
+let _activeContainerObserver: MutationObserver | null = null;
+let _activeSyncCleanup: (() => void) | null = null;
 
 function runDomSync(conversationId: string): void {
-  const turns = scrapeConversationTurns();
-  if (!turns.length) return;
+  const scroller = document.querySelector(CHAT_CONTAINER_SELECTOR);
+  if (!scroller) return;
 
-  if (!_sentContent.has(conversationId))
-    _sentContent.set(conversationId, new Set());
-  const sent = _sentContent.get(conversationId)!;
+  const sessionId = `google:${conversationId}`;
+  const pageTitle = getPageTitle();
+  const scannedAt = Date.now();
 
-  // Filter to only new turns and assign sequential timestamps for correct ordering.
-  const baseTs = Date.now();
-  const newTurns: Array<{ role: string; content: string; timestamp: number }> =
-    [];
-  for (const turn of turns) {
-    const key = `${turn.role}:${turn.content}`;
-    if (sent.has(key)) continue;
-    sent.add(key);
-    newTurns.push({
-      role: turn.role,
-      content: turn.content,
-      timestamp: baseTs + newTurns.length,
-    });
+  const containers = Array.from(scroller.children).filter(
+    (el) => el instanceof HTMLElement && el.id,
+  ) as HTMLElement[];
+
+  const domMessages: DomMessage[] = [];
+
+  for (let i = 0; i < containers.length; i++) {
+    const extracted = extractContainerMessages(containers[i], i);
+    for (const msg of extracted) {
+      domMessages.push({
+        messageId: msg.messageId,
+        role: msg.role,
+        content: msg.content,
+        turnIndex: msg.turnIndex,
+        sessionId,
+        pageTitle,
+        scannedAt,
+      });
+    }
   }
 
-  if (!newTurns.length) return;
-
-  // Send all turns in ONE postMessage so the background handler receives them as a
-  // batch. Session-level dedup in the background (hasSessionRecords) works correctly
-  // only when all records for a conversation arrive together — sending one-at-a-time
-  // caused the second message onward to be dropped after the first was stored.
-  window.postMessage(
-    {
-      type: POST_TYPE,
-      payload: {
-        provider: "google",
-        rawData: { turns: newTurns, conversationId, fromHistory: true },
-        url: DOM_SYNC_URL,
-        timestamp: baseTs,
-      },
-    },
-    window.location.origin,
-  );
+  sendGeminiDomSync(domMessages);
 }
 
 /**
@@ -315,7 +351,7 @@ function runDomSync(conversationId: string): void {
  * do we consider the full conversation loaded and run the scan.
  * A hard 15s ceiling prevents the observer from leaking forever.
  */
-function waitForDomAndSync(conversationId: string): void {
+function waitForDomAndSync(conversationId: string): () => void {
   const SETTLE_MS = 600;
   const MAX_WAIT_MS = 15_000;
 
@@ -332,6 +368,7 @@ function waitForDomAndSync(conversationId: string): void {
   }, MAX_WAIT_MS);
 
   function onSettle(): void {
+    clearTimeout(hardTimeout); // prevent redundant re-fire
     // Scrape on each settle (content dedup in sendCapturedTurn prevents re-sending).
     // Keep the observer alive so lazy-loaded older messages (e.g. scrolling up) are also captured.
     runDomSync(conversationId);
@@ -346,16 +383,114 @@ function waitForDomAndSync(conversationId: string): void {
   syncObserver.observe(document.body, { childList: true, subtree: true });
 
   // If conversation elements are already present, start the settle timer immediately
-  if (document.querySelector("user-query, message-content")) {
+  if (document.querySelector(CHAT_CONTAINER_SELECTOR)) {
     resetSettle();
   }
+
+  // Return cleanup so maybeSyncConversation can cancel this observer on navigation
+  return () => {
+    syncObserver.disconnect();
+    if (settleTimer) clearTimeout(settleTimer);
+    clearTimeout(hardTimeout);
+  };
+}
+
+/** Tracks containerIds already captured in this page session to avoid re-sending. */
+const _capturedContainerIds = new Set<string>();
+
+/**
+ * Watch the infinite-scroller for newly appended turn containers.
+ * Fires for real-time captures (user sends a new message).
+ * Uses a per-container settle debounce to wait for response completion.
+ */
+function watchForNewContainers(conversationId: string): MutationObserver | null {
+  const scroller = document.querySelector(CHAT_CONTAINER_SELECTOR);
+  if (!scroller) return null;
+
+  const sessionId = `google:${conversationId}`;
+  const containerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  function tryCaptureSingleContainer(container: HTMLElement): void {
+    const containerId = container.id;
+    if (!containerId || _capturedContainerIds.has(containerId)) return;
+
+    // Clear any pending timer for this container
+    const existing = containerTimers.get(containerId);
+    if (existing) clearTimeout(existing);
+
+    const SETTLE_MS = 1200; // wait for streaming to complete
+    containerTimers.set(
+      containerId,
+      setTimeout(() => {
+        containerTimers.delete(containerId);
+        if (_capturedContainerIds.has(containerId)) return;
+
+        const extracted = extractContainerMessages(container, -1);
+        // Only capture if we have both user AND assistant message
+        const hasUser = extracted.some((m) => m.role === "user");
+        const hasAssistant = extracted.some((m) => m.role === "assistant");
+        if (!hasUser || !hasAssistant) {
+          // Response not yet complete — reschedule
+          tryCaptureSingleContainer(container);
+          return;
+        }
+
+        _capturedContainerIds.add(containerId);
+        const pageTitle = getPageTitle();
+        const scannedAt = Date.now();
+        const domMessages: DomMessage[] = extracted.map((m) => ({
+          messageId: m.messageId,
+          role: m.role,
+          content: m.content,
+          turnIndex: m.turnIndex,
+          sessionId,
+          pageTitle,
+          scannedAt,
+        }));
+        sendGeminiDomSync(domMessages);
+      }, SETTLE_MS),
+    );
+  }
+
+  const liveObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (
+          node instanceof HTMLElement &&
+          node.id &&
+          node.parentElement === scroller
+        ) {
+          // New top-level container div added to the scroller
+          tryCaptureSingleContainer(node);
+        }
+      }
+      // Also watch for content changes inside existing containers (streaming in progress)
+      if (mutation.target instanceof HTMLElement) {
+        const container = mutation.target.closest<HTMLElement>(
+          `${CHAT_CONTAINER_SELECTOR} > [id]`,
+        );
+        if (container && !_capturedContainerIds.has(container.id)) {
+          tryCaptureSingleContainer(container);
+        }
+      }
+    }
+  });
+
+  liveObserver.observe(scroller, { childList: true, subtree: true });
+  return liveObserver;
 }
 
 function maybeSyncConversation(): void {
   const conversationId = extractGeminiConversationId();
   if (!conversationId) return;
   if (_scannedConversations.has(conversationId)) return;
-  waitForDomAndSync(conversationId);
+  // Disconnect old observers before starting new ones (SPA navigation cleanup)
+  _activeContainerObserver?.disconnect();
+  _activeContainerObserver = null;
+  _activeSyncCleanup?.();
+  _activeSyncCleanup = null;
+  _activeSyncCleanup = waitForDomAndSync(conversationId);
+  _activeContainerObserver = watchForNewContainers(conversationId);
 }
 
 // ─── SPA Navigation Observer ──────────────────────────────────────────────────

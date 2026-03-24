@@ -302,47 +302,7 @@ pnpm test:e2e          # E2E-Tests (Playwright — erst pnpm build ausführen)
 
 ## Änderungsprotokoll
 
-### v0.0.6 — 2026-03-15
-- **Fix:** Themenänderungen werden sofort in allen geöffneten Tabs synchronisiert — zuvor wurde nur der aktive Tab beim Umschalten von Hell/Dunkel aktualisiert
-- **Fix:** Sprachänderungen werden sofort in allen geöffneten Tabs synchronisiert — zuvor war ein Neuladen der Seite nötig
-- **Fix:** Der Zustand des schwebenden Panels (offen/geschlossen, aktive Ansicht) bleibt nach Neuladen und Navigation erhalten — zuvor wurde bei jedem Laden auf den Schwebebutton zurückgesetzt
-- **Refactor:** MainMenuView durch MemoryMenuContent ersetzt — Menüinhalt liegt nun in einer eigenen Komponente, genutzt von Sidebar und Popup
-- **Refactor:** FloatingMemoryPanel von `src/ui/memory-panel/` nach `src/popup/components/` verschoben für einen einheitlichen Popup-UI-Baum
-- **Refactor:** Importe von `src/popup/components/importers/` nach `src/importers/` verschoben zur klareren Trennung
-- **Refactor:** Gemeinsame `chrome.storage`-Hilfen (`loadFromChrome`, `saveToChrome`, `subscribeChromeStorage`) nach `src/utils/chrome-storage.ts` ausgelagert — von Theme- und Sprachkontext genutzt
-- **Refactor:** Hintergrundverarbeitung in eigene Module ausgelagert: `chunking.ts`, `domSync.ts`, `offscreen.ts`, `perplexityBgFetch.ts`
-- **Refactor:** RAG-Prompt-Formatierung und Recall-Logik nach `src/utils/rag.ts`, `src/utils/recall-button.ts`, `src/utils/recall-helpers.ts` ausgelagert
-
-### v0.0.5 — 2026-03-12
-- **Behoben:** Gemini Passiv-Erfassung verwendet jetzt aktualisierte DOM-Selektoren (`<user-query>` / `<message-content>`) passend zur aktuellen Gemini-Oberfläche — Gespräche wurden nach einem Gemini-Frontend-Update stillschweigend verpasst.
-- **Behoben:** Gemini-Doppelerfassung eliminiert — stabile deterministische Record-IDs und XHR-Debounce (1 s) verhindern, dass dieselbe Unterhaltung beim Neuladen oder während des Streamings erneut gespeichert wird.
-- **Behoben:** Recall-Schaltfläche zeigt jetzt eine klare Meldung, wenn das Eingabefeld leer ist oder Erinnerungen bereits eingefügt wurden — verhindert versehentliche Doppeleinspeisung auf allen Plattformen (ChatGPT, Claude, Gemini, Grok, Perplexity).
-- **Behoben:** Das von Recall eingefügte `[System Context]`-Template wird vor dem Speichern entfernt — nur die eigentliche Nutzeranfrage wird gespeichert.
-- **Behoben:** Perplexity Recall-Schaltfläche erscheint jetzt korrekt direkt neben der Schaltfläche „Modell auswählen".
-- **Behoben:** Gemini-Gesprächstitel wird jetzt aus dem Seitenleistenelement statt aus `document.title` gelesen — genauere Session-Namen.
-- **Behoben:** Gemini Text-Einspeisung neu geschrieben für zuverlässigere Eingabeverarbeitung.
-- **Behoben:** Grok-Eingabeerkennung verbessert — keine falschen „Eingabe leer"-Fehler mehr.
-- **Behoben:** Speicher-Listen-Deduplizierung für Gemini- und ChatGPT-Sitzungen verbessert.
-- **Verbessert:** Recall-Schaltfläche Warnmeldungen folgen jetzt der Anzeigesprache der Erweiterung.
-
-### v0.0.4 — 2026-03-06
-- **Neu:** Grok (`grok.com`) Unterstützung — Gespräche werden beim Browsen still erfasst.
-- **Neu:** Gemini passive Nachrichtenerfassung — bestehende Gespräche auf der Seite werden beim Besuch automatisch erfasst.
-
-### v0.0.3 — 2026-03-02
-- Perplexity (`perplexity.ai`) Unterstützung — Gespräche werden beim Browsen still erfasst. Hinweis: Perplexity unterstützt keinen Datenenexport, daher muss jedes Gespräch einzeln geöffnet werden.
-
-### v0.0.2 — 2026-03-01
-- Vollständige Unterstützung für Claude Web (`claude.ai`) — Gesprächserfassung, Recall-Button-Injektion und schwebendes Speicherpanel funktionieren jetzt auf Claude
-
-### v0.0.1 — Erstveröffentlichung
-- ChatGPT- und Gemini-Gesprächserfassung
-- Hybridsuche Vektor + BM25 mit RRF-Fusion
-- Recall-Button per Klick (ChatGPT)
-- Lieblingsaufforderungen mit Trie-Autovervollständigung und Drag-&-Drop-Ordnern
-- JSON-Backup Export / Import
-- Schwebendes Speicherpanel
-- 8 UI-Sprachen, Dunkel- / Hellmodus
+Siehe [CHANGELOG.md](../CHANGELOG.md) für die vollständige Versionsgeschichte.
 
 
 ---
