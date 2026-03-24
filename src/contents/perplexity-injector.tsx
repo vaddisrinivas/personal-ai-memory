@@ -145,6 +145,7 @@ function createRecallButton(): HTMLElement {
       pointerEvents: "auto",
       position: "relative",
       zIndex: "9999",
+      width: "fit-content",
     },
     extraButtonStyles: { pointerEvents: "auto" },
     onButtonClick: (btn, e) => {

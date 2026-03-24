@@ -115,6 +115,7 @@ function createRecallButton(): HTMLElement {
       pointerEvents: "auto",
       position: "relative",
       zIndex: "9999",
+      alignSelf: "center",
     },
     extraButtonStyles: { pointerEvents: "auto" },
     onButtonClick: (btn, e) => {
@@ -140,15 +141,16 @@ function createRecallButton(): HTMLElement {
 // ─── Insertion Point Resolution ───────────────────────────────────────────────
 // Grok's composer toolbar (as of 2026):
 //
-//   [div.h-10.rounded-full.overflow-hidden.shrink-0]  ← voice button container (mic icon)
-//     [button] → [svg.lucide-mic]
 //   <-- inject Recall here -->
-//   [button aria-label="進入語音模式"]                ← voice mode toggle
+//   [div.h-10.rounded-full.shrink-0]    ← voice button container (mic icon)
+//     [button] → [svg.lucide-mic]
+//   [button aria-label="...voice mode"] ← voice mode toggle
 //
 // Strategy (no aria-label to avoid locale issues):
-//   1. Find svg.lucide-mic → walk up to parent div.rounded-full.overflow-hidden.shrink-0
-//      → insert Recall wrapper after that div
-//   2. Fallback: find any button containing svg.lucide-mic → insert after its parent
+//   1. Find svg.lucide-mic → walk up to parent div.rounded-full.shrink-0
+//      → insert Recall wrapper BEFORE that div (left of dictation)
+//   2. Fallback: walk up from mic button until a sibling button is found
+//      → insert before the mic button's wrapper at that level
 //   3. Last resort: find the composer form/toolbar and append
 
 function findInsertionPoint(): {
@@ -158,32 +160,39 @@ function findInsertionPoint(): {
   // Primary: find the lucide-mic SVG → get its container div
   const micSvg = document.querySelector<SVGElement>("svg.lucide-mic");
   if (micSvg) {
-    // Walk up to find the div with rounded-full overflow-hidden shrink-0
+    // Walk up to find the div with rounded-full shrink-0 (the mic button wrapper)
     let el: HTMLElement | null = micSvg.parentElement;
     while (el && el.tagName !== "BODY") {
       if (
         el.tagName === "DIV" &&
         el.classList.contains("rounded-full") &&
-        el.classList.contains("overflow-hidden") &&
         el.classList.contains("shrink-0")
       ) {
-        // Insert after this div (before its next sibling)
+        // Insert BEFORE this div (recall goes left of dictation button)
         if (el.parentElement) {
           return {
             container: el.parentElement as HTMLElement,
-            before: el.nextElementSibling as HTMLElement | null,
+            before: el,
           };
         }
       }
       el = el.parentElement;
     }
-    // Wrapper not found — fall back to inserting after the mic button itself
+    // Wrapper not found — walk up from mic button until we reach the toolbar level
+    // (identified by having a sibling that is or contains a button)
     const micBtn = micSvg.closest("button");
-    if (micBtn?.parentElement) {
-      return {
-        container: micBtn.parentElement as HTMLElement,
-        before: micBtn.nextElementSibling as HTMLElement | null,
-      };
+    if (micBtn) {
+      let fallbackEl: HTMLElement = micBtn;
+      while (fallbackEl.parentElement && fallbackEl.parentElement.tagName !== "BODY") {
+        const parent = fallbackEl.parentElement as HTMLElement;
+        const hasSiblingButton = Array.from(parent.children).some(
+          (c) => c !== fallbackEl && (c.tagName === "BUTTON" || c.querySelector("button") !== null),
+        );
+        if (hasSiblingButton) {
+          return { container: parent, before: fallbackEl };
+        }
+        fallbackEl = parent;
+      }
     }
   }
 

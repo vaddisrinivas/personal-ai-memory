@@ -72,6 +72,7 @@ function createRecallButton(): HTMLElement {
     buttonId: BUTTON_ID,
     inputId: INPUT_ID,
     defaultTopK: DEFAULT_TOP_K,
+    extraWrapperStyles: { width: "fit-content" },
     onButtonClick: (btn) =>
       void sharedHandleRecallClick(btn, {
         buttonId: BUTTON_ID,
