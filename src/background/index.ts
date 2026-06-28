@@ -431,7 +431,7 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
 
 const VAULT_NATIVE_HOST = "com.ai_chat_vault.host";
 const VAULT_SYNC_ALARM = "ai-chat-vault-native-sync";
-const VAULT_BATCH_SIZE = 500;
+const VAULT_BATCH_SIZE = 100;
 const VAULT_MAX_BATCHES_PER_WAKE = 20;
 
 type VaultManifestResponse = {
@@ -702,7 +702,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case "SYNC_VAULT_NATIVE":
-      handleVaultNativeSync({ force: true, maxBatches: 100 })
+      handleVaultNativeSync({ force: true, maxBatches: 50 })
         .then(sendResponse)
         .catch((err) =>
           sendResponse({
