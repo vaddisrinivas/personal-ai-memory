@@ -353,6 +353,7 @@ async function importMemoryRecords(
   inputRecords: ImportMemoriesRequest["payload"]["records"],
   prompts?: ImportMemoriesRequest["payload"]["prompts"],
   folders?: ImportMemoriesRequest["payload"]["folders"],
+  options: { deferBackgroundWork?: boolean } = {},
 ) {
   const records: MemoryRecord[] = inputRecords.map((r) => ({
       ...r,
@@ -397,11 +398,13 @@ async function importMemoryRecords(
   if (Array.isArray(folders) && folders.length > 0) {
     await chrome.storage.local.set({ [FOLDERS_STORAGE_KEY]: folders });
   }
-  // Rebuild keyword index so imported records are immediately searchable
-  void hydrateSearchIndex();
+  if (!options.deferBackgroundWork) {
+    // Rebuild keyword index so imported records are immediately searchable.
+    void hydrateSearchIndex();
 
-  // Process pending embeddings in the background (does not block display)
-  void processPendingEmbeddings();
+    // Process pending embeddings in the background (does not block display).
+    void processPendingEmbeddings();
+  }
 
   // Notify popup so MemoryTableView reloads automatically
   void broadcastStatusUpdate();
@@ -431,7 +434,7 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
 
 const VAULT_NATIVE_HOST = "com.ai_chat_vault.host";
 const VAULT_SYNC_ALARM = "ai-chat-vault-native-sync";
-const VAULT_BATCH_SIZE = 100;
+const VAULT_BATCH_SIZE = 250;
 const VAULT_MAX_BATCHES_PER_WAKE = 20;
 
 type VaultManifestResponse = {
@@ -487,9 +490,13 @@ async function handleVaultNativeSync(options: {
   const fingerprint = vaultFingerprint(manifest);
   const state = await chrome.storage.local.get([
     "vault_native_completed_fingerprint",
+    "vault_native_last_fingerprint",
     "vault_native_offset",
   ]);
   let offset = Number(state.vault_native_offset || 0);
+  if (state.vault_native_last_fingerprint && state.vault_native_last_fingerprint !== fingerprint) {
+    offset = 0;
+  }
   const alreadyComplete = state.vault_native_completed_fingerprint === fingerprint && offset === 0;
   if (alreadyComplete && !options.force) {
     return {
@@ -523,7 +530,9 @@ async function handleVaultNativeSync(options: {
       break;
     }
 
-    const result = await importMemoryRecords(records);
+    const result = await importMemoryRecords(records, undefined, undefined, {
+      deferBackgroundWork: true,
+    });
     imported += result.payload.count;
     skipped += result.payload.skipped || 0;
     offset = response.next_offset ?? (offset + records.length);
@@ -545,6 +554,11 @@ async function handleVaultNativeSync(options: {
     ...(done ? { vault_native_completed_fingerprint: fingerprint } : {}),
   });
 
+  if (imported > 0) {
+    void hydrateSearchIndex();
+    void processPendingEmbeddings();
+  }
+
   return {
     success: true,
     imported,
@@ -554,6 +568,18 @@ async function handleVaultNativeSync(options: {
     fingerprint,
     total: lastTotal,
   };
+}
+
+let vaultNativeSyncInFlight: Promise<Awaited<ReturnType<typeof handleVaultNativeSync>>> | null = null;
+
+function runVaultNativeSync(options: Parameters<typeof handleVaultNativeSync>[0] = {}) {
+  if (vaultNativeSyncInFlight) {
+    return vaultNativeSyncInFlight;
+  }
+  vaultNativeSyncInFlight = handleVaultNativeSync(options).finally(() => {
+    vaultNativeSyncInFlight = null;
+  });
+  return vaultNativeSyncInFlight;
 }
 
 function ensureVaultNativeAlarm() {
@@ -702,7 +728,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case "SYNC_VAULT_NATIVE":
-      handleVaultNativeSync({ force: true, maxBatches: 50 })
+      runVaultNativeSync({ force: true, maxBatches: 50 })
         .then(sendResponse)
         .catch((err) =>
           sendResponse({
@@ -790,7 +816,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
   }
   setTimeout(() => {
-    void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+    void runVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
       console.warn("[AI Memory] Vault native sync failed:", err);
     });
   }, 3000);
@@ -802,7 +828,7 @@ if (typeof chrome.runtime.onStartup !== "undefined") {
   chrome.runtime.onStartup.addListener(() => {
     ensureVaultNativeAlarm();
     injectIntoAITabs();
-    void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+    void runVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
       console.warn("[AI Memory] Vault native startup sync failed:", err);
     });
   });
@@ -810,7 +836,7 @@ if (typeof chrome.runtime.onStartup !== "undefined") {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== VAULT_SYNC_ALARM) return;
-  void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+  void runVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
     console.warn("[AI Memory] Vault native alarm sync failed:", err);
   });
 });
