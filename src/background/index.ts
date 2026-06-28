@@ -349,9 +349,12 @@ async function handleExportMemories() {
   }
 }
 
-async function handleImportMemories(message: ImportMemoriesRequest) {
-  try {
-    const records: MemoryRecord[] = message.payload.records.map((r) => ({
+async function importMemoryRecords(
+  inputRecords: ImportMemoriesRequest["payload"]["records"],
+  prompts?: ImportMemoriesRequest["payload"]["prompts"],
+  folders?: ImportMemoriesRequest["payload"]["folders"],
+) {
+  const records: MemoryRecord[] = inputRecords.map((r) => ({
       ...r,
       embedding: Array.isArray(r.embedding)
         ? new Float32Array(r.embedding)
@@ -360,62 +363,201 @@ async function handleImportMemories(message: ImportMemoriesRequest) {
         Array.isArray(r.embedding) && r.embedding!.length > 0 ? 1 : 0,
     }));
 
-    // Skip records already in the DB (idempotent re-import support)
-    const allIds = records.map((r) => r.id);
-    const newIds = new Set(await db.filterNewChatMessageUuids(allIds));
-    const newRecords = records.filter((r) => newIds.has(r.id));
-    const skippedCount = records.length - newRecords.length;
+  // Skip records already in the DB (idempotent re-import support)
+  const allIds = records.map((r) => r.id);
+  const newIds = new Set(await db.filterNewChatMessageUuids(allIds));
+  const newRecords = records.filter((r) => newIds.has(r.id));
+  const skippedCount = records.length - newRecords.length;
 
-    if (newRecords.length === 0) {
-      // Nothing new — return early, no DB writes or status broadcast needed
-      return {
-        type: "IMPORT_MEMORIES_RESPONSE" as const,
-        payload: { success: true, count: 0, skipped: skippedCount },
-      };
-    }
-
-    await db.memories.bulkPut(newRecords);
-
-    // Persist conversation titles extracted from import metadata (e.g. ChatGPT)
-    const titleUpdates = new Map<string, string>();
-    for (const r of newRecords) {
-      const title = (r.metadata as Record<string, string> | undefined)
-        ?.conversationTitle;
-      if (title && r.sessionId && !titleUpdates.has(r.sessionId)) {
-        titleUpdates.set(r.sessionId, title);
-      }
-    }
-    for (const [sessionId, title] of titleUpdates) {
-      void db.upsertConversationTitle(sessionId, title);
-    }
-
-    const prompts = message.payload.prompts;
-    if (Array.isArray(prompts) && prompts.length > 0) {
-      await chrome.storage.local.set({ [FAVORITE_PROMPTS_KEY]: prompts });
-    }
-    const folders = message.payload.folders;
-    if (Array.isArray(folders) && folders.length > 0) {
-      await chrome.storage.local.set({ [FOLDERS_STORAGE_KEY]: folders });
-    }
-    // Rebuild keyword index so imported records are immediately searchable
-    void hydrateSearchIndex();
-
-    // Process pending embeddings in the background (does not block display)
-    void processPendingEmbeddings();
-
-    // Notify popup so MemoryTableView reloads automatically
-    void broadcastStatusUpdate();
-
+  if (newRecords.length === 0) {
     return {
       type: "IMPORT_MEMORIES_RESPONSE" as const,
-      payload: { success: true, count: newRecords.length, skipped: skippedCount },
+      payload: { success: true, count: 0, skipped: skippedCount },
     };
+  }
+
+  await db.memories.bulkPut(newRecords);
+
+  // Persist conversation titles extracted from import metadata (e.g. ChatGPT)
+  const titleUpdates = new Map<string, string>();
+  for (const r of newRecords) {
+    const title = (r.metadata as Record<string, string> | undefined)
+      ?.conversationTitle;
+    if (title && r.sessionId && !titleUpdates.has(r.sessionId)) {
+      titleUpdates.set(r.sessionId, title);
+    }
+  }
+  for (const [sessionId, title] of titleUpdates) {
+    void db.upsertConversationTitle(sessionId, title);
+  }
+
+  if (Array.isArray(prompts) && prompts.length > 0) {
+    await chrome.storage.local.set({ [FAVORITE_PROMPTS_KEY]: prompts });
+  }
+  if (Array.isArray(folders) && folders.length > 0) {
+    await chrome.storage.local.set({ [FOLDERS_STORAGE_KEY]: folders });
+  }
+  // Rebuild keyword index so imported records are immediately searchable
+  void hydrateSearchIndex();
+
+  // Process pending embeddings in the background (does not block display)
+  void processPendingEmbeddings();
+
+  // Notify popup so MemoryTableView reloads automatically
+  void broadcastStatusUpdate();
+
+  return {
+    type: "IMPORT_MEMORIES_RESPONSE" as const,
+    payload: { success: true, count: newRecords.length, skipped: skippedCount },
+  };
+}
+
+async function handleImportMemories(message: ImportMemoriesRequest) {
+  try {
+    return await importMemoryRecords(
+      message.payload.records,
+      message.payload.prompts,
+      message.payload.folders,
+    );
   } catch (err) {
     return {
       type: "IMPORT_MEMORIES_RESPONSE" as const,
       payload: { success: false, count: 0, error: String(err) },
     };
   }
+}
+
+// ─── Local Vault Native Host Sync ─────────────────────────────────────────────
+
+const VAULT_NATIVE_HOST = "com.ai_chat_vault.host";
+const VAULT_SYNC_ALARM = "ai-chat-vault-native-sync";
+const VAULT_BATCH_SIZE = 500;
+const VAULT_MAX_BATCHES_PER_WAKE = 20;
+
+type VaultManifestResponse = {
+  ok: boolean;
+  records?: number;
+  tool_records?: number;
+  chunk_count?: number;
+  generated_at?: string;
+  source_fingerprint?: string;
+  error?: string;
+};
+
+type VaultRecordsResponse = {
+  ok: boolean;
+  records?: ImportMemoriesRequest["payload"]["records"];
+  offset?: number;
+  next_offset?: number;
+  total?: number;
+  done?: boolean;
+  generated_at?: string;
+  source_fingerprint?: string;
+  error?: string;
+};
+
+function sendNativeVaultMessage<T>(message: Record<string, unknown>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendNativeMessage(VAULT_NATIVE_HOST, message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(response as T);
+    });
+  });
+}
+
+function vaultFingerprint(manifest: VaultManifestResponse): string {
+  return manifest.source_fingerprint || manifest.generated_at || "unknown";
+}
+
+async function handleVaultNativeSync(options: {
+  batchSize?: number;
+  maxBatches?: number;
+  force?: boolean;
+} = {}) {
+  const batchSize = Math.max(1, options.batchSize || VAULT_BATCH_SIZE);
+  const maxBatches = Math.max(1, options.maxBatches || VAULT_MAX_BATCHES_PER_WAKE);
+  const manifest = await sendNativeVaultMessage<VaultManifestResponse>({ type: "manifest" });
+  if (!manifest?.ok) {
+    throw new Error(manifest?.error || "Vault native host manifest failed");
+  }
+
+  const fingerprint = vaultFingerprint(manifest);
+  const state = await chrome.storage.local.get([
+    "vault_native_completed_fingerprint",
+    "vault_native_offset",
+  ]);
+  let offset = Number(state.vault_native_offset || 0);
+  const alreadyComplete = state.vault_native_completed_fingerprint === fingerprint && offset === 0;
+  if (alreadyComplete && !options.force) {
+    return {
+      success: true,
+      skipped: true,
+      fingerprint,
+      total: manifest.records || 0,
+    };
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let done = false;
+  let lastTotal = manifest.records || 0;
+
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const response = await sendNativeVaultMessage<VaultRecordsResponse>({
+      type: "records",
+      offset,
+      limit: batchSize,
+    });
+    if (!response?.ok) {
+      throw new Error(response?.error || "Vault native host records failed");
+    }
+
+    const records = response.records || [];
+    lastTotal = response.total || lastTotal;
+    if (!records.length) {
+      done = true;
+      offset = 0;
+      break;
+    }
+
+    const result = await importMemoryRecords(records);
+    imported += result.payload.count;
+    skipped += result.payload.skipped || 0;
+    offset = response.next_offset ?? (offset + records.length);
+
+    if (response.done) {
+      done = true;
+      offset = 0;
+      break;
+    }
+  }
+
+  await chrome.storage.local.set({
+    vault_native_offset: offset,
+    vault_native_last_fingerprint: fingerprint,
+    vault_native_last_sync_at: new Date().toISOString(),
+    vault_native_last_imported: imported,
+    vault_native_last_skipped: skipped,
+    vault_native_total_records: lastTotal,
+    ...(done ? { vault_native_completed_fingerprint: fingerprint } : {}),
+  });
+
+  return {
+    success: true,
+    imported,
+    skipped,
+    done,
+    nextOffset: offset,
+    fingerprint,
+    total: lastTotal,
+  };
+}
+
+function ensureVaultNativeAlarm() {
+  chrome.alarms.create(VAULT_SYNC_ALARM, { periodInMinutes: 1 });
 }
 
 // ─── Message Router ───────────────────────────────────────────────────────────
@@ -559,6 +701,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         );
       return true;
 
+    case "SYNC_VAULT_NATIVE":
+      handleVaultNativeSync({ force: true, maxBatches: 100 })
+        .then(sendResponse)
+        .catch((err) =>
+          sendResponse({
+            success: false,
+            error: String(err),
+          }),
+        );
+      return true;
+
     case "DOM_SYNC":
       handleDomSync(message as DomSyncRequest, () => {
         lastCaptureTime = Date.now();
@@ -629,21 +782,40 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 // Open onboarding tab on first install
 chrome.runtime.onInstalled.addListener(async (details) => {
+  ensureVaultNativeAlarm();
   if (details.reason === 'install') {
     const { onboarding_completed } = await chrome.storage.local.get('onboarding_completed')
     if (!onboarding_completed) {
       chrome.tabs.create({ url: chrome.runtime.getURL('tabs/onboarding.html') })
     }
   }
+  setTimeout(() => {
+    void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+      console.warn("[AI Memory] Vault native sync failed:", err);
+    });
+  }, 3000);
 })
 
 // Inject into already-open AI tabs when extension loads (e.g. user had ChatGPT
 // open before installing or reloading the extension).
 if (typeof chrome.runtime.onStartup !== "undefined") {
   chrome.runtime.onStartup.addListener(() => {
+    ensureVaultNativeAlarm();
     injectIntoAITabs();
+    void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+      console.warn("[AI Memory] Vault native startup sync failed:", err);
+    });
   });
 }
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== VAULT_SYNC_ALARM) return;
+  void handleVaultNativeSync({ maxBatches: VAULT_MAX_BATCHES_PER_WAKE }).catch((err) => {
+    console.warn("[AI Memory] Vault native alarm sync failed:", err);
+  });
+});
+
+ensureVaultNativeAlarm();
 
 // Inject into already-open AI tabs when this script loads (e.g. after install/reload).
 injectIntoAITabs();
